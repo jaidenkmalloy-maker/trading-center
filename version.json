@@ -1,6 +1,6 @@
 {
-  "version": "1.1.0",
-  "notes": "Free GEX levels from Cboe, a key-level strategy, and a smoother dark look",
+  "version": "1.1.1",
+  "notes": "Installer with a desktop shortcut; small fix",
   "files": {
     "app/index.html": "32ab590ddb0cba764d24adf117ac58ff7ab4fb94e7a8efd913f62c3e3d4c7f3b",
     "app/style.css": "c3e33aff76a504ac35e5ba68a2521d2b333af683e135575221b95fc3e9f60aff",
@@ -15,7 +15,7 @@
     "app/ui2.js": "98eee27c832f1410a2d0ebe8bc9372a214431024878f35f7a676f461e04b9761",
     "app/ui3.js": "5cd123eb8c3761fb138db648bdb4b32a5e3a239722b324f320d9acdad52521d6",
     "app/ui4.js": "e3dde7e5c47a40ceb53079fe0897cb63d8d991b087eda0ead55c16af15e578c4",
-    "server.js": "9c8060d374a9af0a3dbef25aab21d2f6073a5c316a3e4198d22f240cc4d96426",
+    "server.js": "9ae4b6bcb0cc1a950e2662ca9e20202fc97a9f0fa8522173427ca7ae15ec27e4",
     "gex.js": "0c48b1b21c073f479aa5279b60ecb13471831e82f9f598c29c513c39848db8c4"
   }
 }

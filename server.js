@@ -7,7 +7,7 @@
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto'), { exec } = require('child_process');
 const GEX = require('./gex.js');
 const DIR = __dirname, APP = path.join(DIR, 'app'), STAGE = path.join(DIR, 'update-staging');
-const readJson = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return d; } };
+const readJson = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, '')); } catch (e) { return d; } };
 const CFG = Object.assign({ port: 7457, upstream: 'https://api.topstepx.com', updateUrl: '', openWindow: true, checkEveryMin: 60 }, readJson(path.join(DIR, 'config.json'), {}));
 if (process.env.TCC_PORT) CFG.port = +process.env.TCC_PORT;
 if (process.env.TCC_UPSTREAM) CFG.upstream = process.env.TCC_UPSTREAM;
