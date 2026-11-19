@@ -16,6 +16,7 @@ function kpFromBroker(kind, msg, ok) { const r = KP_RULE[kind]; if (r) kpSend(r[
 function kpFromNote(sys, kind, msg) { if ((sys === 'rules' && kind === 'halt') || (sys === 'performance' && kind === 'pause')) kpSend(sys === 'rules' ? 'Rules Manager' : 'Performance Manager', msg, 4); }
 function kpWatch() {   // once per tick: connection trouble and the end-of-day report
   const r = runner; if (!r || !sim || runner.sim !== sim) return;
+  try { const L = r.learner; if (L && L.lastRunAt !== KP.labShown) { KP.labShown = L.lastRunAt; labRender(); } } catch (e) { }
   if (r.lastError) { if (!KP.errSince) KP.errSince = Date.now(); if (Date.now() - KP.errSince > 60000) kpSend('Problem', 'Connection trouble for over a minute: ' + r.lastError, 4); } else KP.errSince = null;
   const now = new Date(), ct = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' })), day = ct.toDateString(), mins = ct.getHours() * 60 + ct.getMinutes(), R = sim.rules;
   if (KP.day !== day) { KP.day = day; KP.dayStart = R.closed || 0; }
@@ -29,8 +30,8 @@ function keepTicker(fn, ms) {   // a background worker drives the ticks, so the 
   return { stop() { if (w) w.terminate(); if (iv) clearInterval(iv); } };
 }
 function kpStartLive(r) {
-  r.broker.onLog = kpFromBroker; r.sim.onNote = kpFromNote; kpWake();
-  return keepTicker(() => { r.tick(); kpWatch(); }, 3000);
+  r.broker.onLog = kpFromBroker; r.sim.onNote = kpFromNote; kpWake(); setTimeout(() => gxSync(false), 500);
+  return keepTicker(() => { r.tick(); kpWatch(); if (IS_APP && Date.now() - GX.syncedAt > 15 * 60000) gxSync(false); }, 3000);
 }
 function kpRender() {
   const el = document.getElementById('kpBody'); if (!el) return; const act = document.activeElement && document.activeElement.id === 'kpTopic';
@@ -56,7 +57,7 @@ function lvRenderLevels(keepInputs) {
   const day = (el.querySelector('#lvDate') && el.querySelector('#lvDate').value) || lvToday(), cur = LV.byDay[day], n = lvlDays({ levelsByDay: LV.byDay });
   const val = k => { const l = cur && cur.lv.find(x => x.k === k); return l && cur.raw && cur.raw[k] != null ? cur.raw[k] : ''; };
   const last = sim && sim.bars && sim.bars.length ? sim.bars[sim.bars.length - 1].c : null;
-  el.innerHTML = `<div class="form"><label>Trading day<input id="lvDate" type="date" value="${esc(day)}" onchange="lvRenderLevels()"></label>${LV_KINDS.map(([k, n2]) => `<label>${n2}<input id="lv_${k}" type="number" step="0.25" value="${esc(val(k))}" placeholder="optional"></label>`).join('')}<label>Adjust (add to every number)<input id="lvOff" type="number" step="0.25" value="${cur ? cur.off : LV.off}"></label></div>
+  el.innerHTML = gxHtml() + `<div class="form"><label>Trading day<input id="lvDate" type="date" value="${esc(day)}" onchange="lvRenderLevels()"></label>${LV_KINDS.map(([k, n2]) => `<label>${n2}<input id="lv_${k}" type="number" step="0.25" value="${esc(val(k))}" placeholder="optional"></label>`).join('')}<label>Adjust (add to every number)<input id="lvOff" type="number" step="0.25" value="${cur ? cur.off : LV.off}"></label></div>
   <div class="row" style="margin:8px 0"><button class="primary small" onclick="lvSave()">Save these levels</button><button class="small" onclick="lvClear()">Clear this day</button></div>
   <div class="note"><b id="lvMsgBox">${esc(LV.msg)}</b><br>${last ? 'Last MES price: ' + last.toFixed(2) + '. ' : ''}Days recorded: <b>${n}</b> of ${MIN_LVL_DAYS} needed before the Backtester can test level trades${n >= MIN_LVL_DAYS ? ' (enough now: the Lab will include them)' : ''}. Fill in only the levels your TradingView indicator shows. Use the numbers as they appear on an ES or MES futures chart. If your indicator shows SPX prices instead, type the current difference (ES price minus SPX price) into Adjust. Enter them each morning before the open.</div>`;
 }
@@ -66,7 +67,7 @@ function lvSave() {
   for (const [k] of LV_KINDS) { const v = document.getElementById('lv_' + k).value; if (v === '') continue; const x = +v; if (!(x > 0)) { return lvMsgShow('Level "' + k + '" is not a number.'); } raw[k] = x; lv.push({ k, p: x + off }); }
   if (!lv.length) return lvMsgShow('Type at least one level first.');
   if (last && lv.some(l => Math.abs(l.p - last) / last > 0.08) && day === lvToday()) return lvMsgShow('Not saved: a level is more than 8% away from the current MES price (' + last.toFixed(2) + '). Check the numbers and the Adjust box.');
-  LV.byDay[day] = { off, raw, lv }; LV.off = off; LV.msg = 'Saved ' + lv.length + ' levels for ' + day + '.'; lvSaveStore(); if (sim && sim.c) sim.c.levelsByDay = LV.byDay; lvRenderLevels(); if (typeof render === 'function') render();
+  LV.byDay[day] = { off, raw, lv, auto: false }; LV.off = off; LV.msg = 'Saved ' + lv.length + ' levels for ' + day + '.'; lvSaveStore(); if (sim && sim.c) sim.c.levelsByDay = LV.byDay; lvRenderLevels(); if (typeof render === 'function') render();
 }
 function lvClear() { const day = document.getElementById('lvDate').value || lvToday(); delete LV.byDay[day]; LV.msg = 'Cleared ' + day + '.'; lvSaveStore(); lvRenderLevels(); }
 
@@ -99,4 +100,36 @@ function confirmFlat() { const pos = appHasPos(); return !pos; }
 if (IS_APP) {
   const gw = document.getElementById('lvBase'); if (gw) gw.value = location.origin + '/tsx';
   appPoll(); setInterval(appPoll, 60000);
+}
+
+// ---- automatic GEX levels (free Cboe data, computed by the app program) ----
+const GX = { last: null, err: null, syncedAt: 0, busy: false };
+function gxPriceAt(ms) { const b = sim && sim.bars; if (!b || !b.length) return null; let best = null; for (let i = b.length - 1; i >= 0; i--) { if (b[i].t <= ms) { best = b[i]; break; } } return best && ms - best.t < 3 * 3600e3 ? best.c : null; }
+function gxApply(day, s) {
+  if (!s || !s.spot) return false; const cur = LV.byDay[day]; if (cur && !cur.auto) return false;   // never overwrite levels you typed
+  const mes = gxPriceAt((s.fetchedAt || 0) - 15 * 60000); if (mes == null) return false;
+  const off = Math.round((mes - s.spot) * 4) / 4, raw = {}, lv = [];
+  for (const [k, f] of [['call', 'callWall'], ['put', 'putWall'], ['flip', 'flip'], ['ivHi', 'ivHi'], ['ivLo', 'ivLo']]) if (s[f] > 0) { raw[k] = s[f]; lv.push({ k, p: Math.round((s[f] + off) * 4) / 4 }); }
+  if (!lv.length) return false;
+  LV.byDay[day] = { auto: true, off, raw, lv, spot: s.spot, regime: s.regime }; return true;
+}
+async function gxSync(force) {
+  if (!IS_APP || GX.busy) return; GX.busy = true;
+  try {
+    const now = await (await fetch('/app/gex' + (force ? '?force=1' : ''), { cache: 'no-store' })).json(); GX.last = now.levels; GX.err = now.error; GX.today = now.today;
+    const hist = (await (await fetch('/app/gex/history', { cache: 'no-store' })).json()).days || {}; let changed = false;
+    for (const [day, s] of Object.entries(hist)) if (gxApply(day, s)) changed = true;
+    if (changed) { lvSaveStore(); if (sim && sim.c) sim.c.levelsByDay = LV.byDay; }
+    GX.syncedAt = Date.now(); lvRenderLevels(true);
+  } catch (e) { GX.err = 'The app program did not answer: ' + e.message; }
+  finally { GX.busy = false; }
+}
+function gxHtml() {
+  if (!IS_APP) return '<div class="note">Automatic GEX levels work in the app version (Start Trading Center).</div>';
+  const s = GX.last; if (!s && !GX.err) return '<div class="note">Getting free GEX data from Cboe…</div>';
+  if (!s) return `<div class="note neg">${esc(GX.err)}</div>`;
+  const f = x => x == null ? '-' : x.toFixed(2), td = LV.byDay[GX.today];
+  return `<div class="gexbox"><div class="gexhd"><b>Auto GEX</b> <span class="tag ${s.regime === 'positive' ? 'good' : 'bad'}">${s.regime} gamma</span> <span class="mut">free Cboe data, about 15 min delayed, SPX ${f(s.spot)}</span></div>
+    <div class="gexrow"><span>Call wall <b>${f(s.callWall)}</b></span><span>IV high <b>${f(s.ivHi)}</b></span><span>Flip <b>${f(s.flip)}</b></span><span>IV low <b>${f(s.ivLo)}</b></span><span>Put wall <b>${f(s.putWall)}</b></span></div>
+    <div class="note">${td && td.auto ? 'Today\'s levels were set automatically from the 8:00 CT reading (shifted ' + (td.off >= 0 ? '+' : '') + td.off + ' to MES prices).' : td ? 'You typed today\'s levels yourself, so the automatic ones are not used today.' : 'Today\'s levels are saved from the first reading after 8:00 CT on trading days.'} Positive gamma tends to calm moves (bounces at walls); negative gamma tends to stretch them.${GX.err ? ' Last refresh failed: ' + esc(GX.err) : ''}</div></div>`;
 }

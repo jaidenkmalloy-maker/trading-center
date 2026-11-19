@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div class="shell"><aside class="side"><div class="brand"><i></i>Control Center</div><a href="#kpis" data-sec="kpis"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Overview</a><a href="#liveWrap" data-sec="liveWrap"><svg viewBox="0 0 24 24"><path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/></svg>Live (Topstep)</a><a href="#systems" data-sec="systems"><svg viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg>Systems</a><a href="#chartSec" data-sec="chartSec"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 4-6"/></svg>Chart & ticket</a><a href="#labPanel" data-sec="labPanel"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></svg>Strategy Lab</a><a href="#chatSec" data-sec="chatSec"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Talk to the systems</a><a href="#actSec" data-sec="actSec"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Activity</a><a href="#dataBox" data-sec="dataBox"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Data & settings</a><div class="sfoot" id="sideFoot">Topstep 50K Combine</div></aside><div class="maincol">
 <header>
   <div class="row"><h1>Trading Control Center</h1><span class="row tabs" style="gap:0"><button id="tabReplay" class="small primary" onclick="setView('replay')">Replay</button><button id="tabLive" class="small" onclick="setView('live')">Live (Topstep)</button></span><span id="src" class="pill"></span><span id="overall" class="pill"></span><span id="appVer" class="pill" style="display:none"></span></div>
   <div class="row">
@@ -23,6 +24,7 @@
 </header>
 <main><div id="appBanner"></div>
   <div id="banners"></div>
+  <section class="kpis" id="kpis"></section>
   <div class="meta" id="where"></div>
   <div class="prog"><div id="progBar" style="width:0"></div></div>
   <section id="liveWrap" class="lv" style="display:none">
@@ -45,13 +47,13 @@
     </div>
     <div id="lvCtlWrap" style="display:none">
       <div class="panel" style="margin-bottom:14px"><h2>Executor control <small>real orders on your Topstep account</small></h2><div id="lvCtl"></div><div id="lvGate"></div></div>
-      <div class="panel" style="margin-bottom:14px"><h2>Levels <small>the day&#39;s GEX / IV-wall numbers from TradingView</small></h2><div id="lvlBody"></div></div>
+      <div class="panel" style="margin-bottom:14px"><h2>Levels <small>the day&#39;s GEX / IV walls: automatic in the app, or type them yourself</small></h2><div id="lvlBody"></div></div>
       <div class="panel" style="margin-bottom:14px"><h2>Phone alerts <small>get a message when something happens, even when you are away</small></h2><div id="kpBody"></div></div>
       <div class="panel" style="margin-bottom:14px"><h2>Broker log <small>what was sent and why</small></h2><div class="scroll" id="lvLog"></div></div>
     </div>
   </section>
   <section class="systems" id="systems"></section>
-  <div class="grid">
+  <div class="grid" id="chartSec">
     <div class="panel"><h2>Chart <small id="chartNote"></small></h2><div id="chart"></div>
       <div class="legend">Amber band = fib entry zone for the active setup &middot; red dotted = stop level &middot; &#9670; setup found &middot; &#9650;/&#9660; entry &middot; &#9679; exit</div></div>
     <div>
@@ -60,13 +62,13 @@
     </div>
   </div>
   <div class="panel" id="labPanel" style="margin-bottom:14px"><h2>Strategy Lab <small>the Backtester: tests known strategies on all stored history and approves only what holds up</small></h2><div id="labBody"></div></div>
-  <div class="panel" style="margin-bottom:14px"><h2>Talk to the systems <small>ask what each one is doing and why</small></h2>
+  <div class="panel" id="chatSec" style="margin-bottom:14px"><h2>Talk to the systems <small>ask what each one is doing and why</small></h2>
     <div class="ctabs" id="ctabs"></div><div class="chat" id="chatBox"></div>
     <div class="row"><input id="chatIn" style="flex:1;min-width:200px" placeholder="Ask, for example: why no trade? how much can I lose today? flatten" onkeydown="if(event.key==='Enter')chatAsk()"><button class="primary" onclick="chatAsk()">Ask</button></div>
     <details><summary>Optional: connect a real AI (Claude) for fuller answers</summary><div class="form"><label>Anthropic API key<input id="aiKey" type="password" autocomplete="off"></label><label>Model<input id="aiModel" value="claude-sonnet-5-5"></label></div>
     <div class="note">Without a key, the systems answer from their own numbers using fixed rules (not an AI language model). With a key, your question and a snapshot of the app's state (never your Topstep key) go to Anthropic, which bills your Anthropic account. The AI can explain and suggest; it cannot place orders. Commands like flatten or kill always show a button you must click.</div></details>
   </div>
-  <div class="grid3">
+  <div class="grid3" id="actSec">
     <div class="panel"><h2>Decisions <small>every system's reasoning, newest first</small></h2><div class="scroll" id="decisions"></div></div>
     <div class="panel"><h2>Orders feed <small id="ordSub"></small></h2><div class="scroll" id="orders"></div></div>
     <div class="panel"><h2>Closed trades <button class="small" onclick="downloadTrades()" style="float:right">Download CSV</button></h2><div class="scroll" id="trades"></div></div>
@@ -92,6 +94,7 @@
     <div class="row" style="margin-top:10px"><button onclick="resetSettings()">Restore defaults</button></div>
     <div class="note">Topstep numbers here are my understanding of a 50K Combine. Topstep changes its rules often, so check each one against your own account before trusting a result.</div></div></details>
 </main>
+</div></div>
 <script src="engine1.js"></script>
 <script src="engine2.js"></script>
 <script src="engine3.js"></script>

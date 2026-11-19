@@ -5,6 +5,7 @@
 //  - checks for updates, verifies them, and installs them only when you click Install
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto'), { exec } = require('child_process');
+const GEX = require('./gex.js');
 const DIR = __dirname, APP = path.join(DIR, 'app'), STAGE = path.join(DIR, 'update-staging');
 const readJson = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return d; } };
 const CFG = Object.assign({ port: 7457, upstream: 'https://api.topstepx.com', updateUrl: '', openWindow: true, checkEveryMin: 60 }, readJson(path.join(DIR, 'config.json'), {}));
@@ -12,6 +13,8 @@ if (process.env.TCC_PORT) CFG.port = +process.env.TCC_PORT;
 if (process.env.TCC_UPSTREAM) CFG.upstream = process.env.TCC_UPSTREAM;
 if (process.env.TCC_UPDATE_URL != null) CFG.updateUrl = process.env.TCC_UPDATE_URL;
 if (process.env.TCC_NO_OPEN) CFG.openWindow = false;
+CFG.cboeUrl = process.env.TCC_CBOE_URL || CFG.cboeUrl || GEX.CBOE_URL;
+const GDIR = path.join(DIR, 'data', 'gex');
 const VERSION_FILE = path.join(DIR, 'version.json');
 let current = readJson(VERSION_FILE, { version: '0.0.0', files: {} });
 const upd = { state: CFG.updateUrl ? 'idle' : 'off', available: null, msg: CFG.updateUrl ? 'Not checked yet.' : 'Automatic updates are not set up (see README).', checkedAt: null };
@@ -57,6 +60,29 @@ async function applyUpdate() {
   return { version: v.version, restart };
 }
 
+
+// ---- free GEX levels ----
+const gx = { last: null, at: 0, err: null, busy: null };
+async function getGex(force) {
+  if (!force && gx.last && Date.now() - gx.at < 10 * 60000) return gx;
+  if (gx.busy) return gx.busy;
+  gx.busy = (async () => {
+    try {
+      const r = await fetch(CFG.cboeUrl, { headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36', accept: 'application/json' }, signal: AbortSignal.timeout(30000) });
+      if (!r.ok) throw new Error('Cboe answered ' + r.status);
+      const lv = GEX.computeGex(await r.json(), Date.now()), now = Date.now(), ct = GEX.ctNow(now);
+      lv.fetchedAt = now; lv.day = ct.day; gx.last = lv; gx.at = now; gx.err = null;
+      fs.mkdirSync(GDIR, { recursive: true }); fs.writeFileSync(path.join(GDIR, 'latest.json'), JSON.stringify(lv));
+      const f = path.join(GDIR, ct.day + '.json'), weekday = !['Sat', 'Sun'].includes(ct.dow) || ct.mins >= 1020;
+      if (weekday && ct.mins >= 480 && ct.mins < 900 && !fs.existsSync(f)) { fs.writeFileSync(f, JSON.stringify(lv)); log('Saved today\'s GEX levels (' + ct.day + ').'); }   // the day's levels: first reading after 8:00 CT
+    } catch (e) { gx.err = 'Could not get GEX data: ' + e.message; log(gx.err); }
+    finally { gx.busy = null; }
+    return gx;
+  })();
+  return gx.busy;
+}
+function gexHistory() { const out = {}; try { for (const f of fs.readdirSync(GDIR)) if (/^\d{4}-\d{2}-\d{2}\.json$/.test(f)) out[f.slice(0, 10)] = readJson(path.join(GDIR, f), null); } catch (e) { } return out; }
+
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const send = (res, code, body, type) => { res.writeHead(code, { 'content-type': type || 'application/json', 'cache-control': 'no-store' }); res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
 const readBody = req => new Promise((ok, bad) => { const c = []; let n = 0; req.on('data', d => { n += d.length; if (n > 2e6) { bad(new Error('too big')); req.destroy(); } else c.push(d); }); req.on('end', () => ok(Buffer.concat(c))); req.on('error', bad); });
@@ -75,6 +101,8 @@ const server = http.createServer(async (req, res) => {
       catch (e) { return send(res, 502, { success: false, errorMessage: 'This computer could not reach Topstep: ' + e.message }); }
       const out = Buffer.from(await r.arrayBuffer()); return send(res, r.status, out, r.headers.get('content-type') || 'application/json');
     }
+    if (u.pathname === '/app/gex') { const g = await getGex(u.searchParams.get('force') === '1'); const ct = GEX.ctNow(Date.now()); return send(res, 200, { ok: !!g.last, levels: g.last, error: g.err, today: ct.day, todaySaved: fs.existsSync(path.join(GDIR, ct.day + '.json')) ? readJson(path.join(GDIR, ct.day + '.json'), null) : null }); }
+    if (u.pathname === '/app/gex/history') return send(res, 200, { days: gexHistory() });
     if (u.pathname === '/app/status') return send(res, 200, { version: current.version, update: { state: upd.state, msg: upd.msg, version: upd.available && upd.available.version, notes: upd.available && upd.available.notes } });
     if (u.pathname === '/app/check' && req.method === 'POST') { await checkUpdate(); return send(res, 200, { state: upd.state, msg: upd.msg }); }
     if (u.pathname === '/app/install' && req.method === 'POST') { try { return send(res, 200, Object.assign({ ok: true }, await applyUpdate())); } catch (e) { upd.msg = e.message; return send(res, 200, { ok: false, msg: e.message }); } }
@@ -112,6 +140,7 @@ server.listen(CFG.port, '127.0.0.1', () => {
   log(`Trading Control Center ${current.version} is running at ${url}`);
   log('Keep this window open while you trade. Closing it stops the app.');
   openWindow(url);
+  getGex(); setInterval(() => getGex(true), 15 * 60000);
   if (CFG.updateUrl) { checkUpdate(); setInterval(checkUpdate, Math.max(5, CFG.checkEveryMin) * 60000); }
 });
 module.exports = { server, checkUpdate, applyUpdate, CFG, upd };

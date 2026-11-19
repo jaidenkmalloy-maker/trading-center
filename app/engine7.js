@@ -63,6 +63,29 @@ class LvlStrat {   // trades the bounce or rejection at the daily option levels 
     return null;
   }
 }
+class KeyLvlStrat {   // bounce / rejection at yesterday's high-low and the overnight high-low (levels with full history, so the Lab can test the idea today)
+  constructor(b, c, p, ind) { this.b = b; this.c = c; this.p = p; this.ind = ind; this.day = null; this.dH = -Infinity; this.dL = Infinity; this.pdH = null; this.pdL = null; this.onH = -Infinity; this.onL = Infinity; this.fired = {}; }
+  onBar(i) {
+    const bar = this.b[i], c = this.c, p = this.p, o = hm(c.sessionOpen || '08:30');
+    if (bar.day !== this.day) { if (this.day !== null && this.dH > -Infinity) { this.pdH = this.dH; this.pdL = this.dL; } this.day = bar.day; this.dH = -Infinity; this.dL = Infinity; this.onH = -Infinity; this.onL = Infinity; this.fired = {}; }
+    const rth = bar.mins >= o && bar.mins < 1020;
+    let sig = null;
+    if (rth && i >= 30 && winOk(bar, c)) {
+      const atr = this.ind.atr[i], tol = 0.15 * atr, L = [];
+      if (p.use !== 'on' && this.pdH != null) L.push(['pdh', this.pdH, -1], ['pdl', this.pdL, 1]);
+      if (p.use !== 'pd' && this.onH > -Infinity) L.push(['onh', this.onH, -1], ['onl', this.onL, 1]);
+      for (const [k, P, dir] of L) {
+        if (sig || this.fired[k]) continue;
+        if (dir > 0 && bar.l <= P + tol && bar.c > P && bar.c > bar.o) { this.fired[k] = 1; const stop = Math.min(bar.l, P) - p.k * atr; sig = mkSig(c, i, bar, 'long', stop, bar.c + p.m * (bar.c - stop), { level: k }); }
+        else if (dir < 0 && bar.h >= P - tol && bar.c < P && bar.c < bar.o) { this.fired[k] = 1; const stop = Math.max(bar.h, P) + p.k * atr; sig = mkSig(c, i, bar, 'short', stop, bar.c - p.m * (stop - bar.c), { level: k }); }
+      }
+    }
+    // update today's range and the overnight range only after this candle has been judged (no look-ahead)
+    this.dH = Math.max(this.dH, bar.h); this.dL = Math.min(this.dL, bar.l);
+    if (bar.mins < o || bar.mins >= 1020) { this.onH = Math.max(this.onH, bar.h); this.onL = Math.min(this.onL, bar.l); }
+    return sig;
+  }
+}
 class Rsi2Strat {
   constructor(b, c, p, ind) { this.b = b; this.c = c; this.p = p; this.ind = ind; this.last = -99; }
   onBar(i) {
@@ -110,6 +133,7 @@ const STRATS = {
   boll: { name: 'Bollinger band reversion', blurb: 'Fades a close outside the 20-bar band when the candle turns back; target is the middle band.', grid: { sd: [2, 2.5], k: [1.5, 2.5] }, make: (b, c, p, i) => new BollStrat(b, c, p, i) },
   emapb: { name: 'Trend pullback (EMA)', blurb: 'In a trend, buys the bounce off the 20-bar average (sells the rejection in a downtrend).', grid: { k: [1, 1.5], m: [1.5, 2.5] }, make: (b, c, p, i) => new EmaPbStrat(b, c, p, i) },
   lvl: { name: 'Option-level bounce (GEX/IV walls)', needsLevels: true, blurb: 'Buys the bounce off a put wall or IV low, sells the rejection at a call wall or IV high, using the levels you enter each morning. Tested only once enough days are recorded.', grid: { k: [0.5, 1], m: [1.5, 2], use: ['walls', 'all'] }, make: (b, c, p, i) => new LvlStrat(b, c, p, i) },
+  keylvl: { name: 'Key-level bounce (yesterday & overnight)', blurb: 'Buys the bounce off yesterday\'s low or the overnight low, sells the rejection at yesterday\'s high or the overnight high. Same idea as the GEX levels, but with years of history to test on.', grid: { k: [0.5, 1], m: [1.5, 2], use: ['pd', 'on', 'both'] }, make: (b, c, p, i) => new KeyLvlStrat(b, c, p, i) },
   donch: { name: 'Donchian breakout', blurb: 'Buys a close above the highest high of the last 20 or 40 candles (sells below the lowest low).', grid: { n: [20, 40], k: [1.5], m: [1.5, 3] }, make: (b, c, p, i) => new DonchStrat(b, c, p, i) }
 };
 const stratKey = (id, p) => id + '|' + Object.keys(p).sort().map(k => p[k]).join('|');

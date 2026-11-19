@@ -5,13 +5,13 @@ function gauge(label, val, pctv, color) {
 }
 function gaugesHtml(h) {
   const c = sim.c, R = sim.rules, s = h.snap, E = sim.ex, bar = sim.bars[Math.max(0, sim.i - 1)] || { mins: 0 };
-  const col = v => v > 50 ? '#2ea66a' : v > 25 ? '#d29922' : '#e5534b';
+  const col = v => v > 50 ? '#3ee6b0' : v > 25 ? '#f2b84b' : '#f27272';
   let out = gauge('Buffer above loss-limit floor', `${usd(s.buffer)} of ${usd(c.maxLoss)}`, s.bufPct, col(s.bufPct));
   const room = (c.dailyStop + s.today) / c.dailyStop * 100;
   out += gauge('Room before daily stop', `${usd(c.dailyStop + s.today)} left (today ${usd(s.today)})`, room, col(room));
-  out += gauge('Profit target', `${usd(s.closed)} of ${usd(c.profitTarget)}`, s.progress * 100, '#4c8dff');
-  out += s.cons == null ? gauge('Best day vs consistency limit', 'no profit yet', 0, '#4c8dff') : gauge('Best day vs consistency limit', `${s.cons.toFixed(0)}% (limit ${c.consistencyPct}%)`, s.cons / c.consistencyPct * 100, s.cons <= c.consistencyPct ? '#2ea66a' : '#e5534b');
-  out += gauge('Trades today', `${R.nToday} of ${c.maxTradesPerDay}`, R.nToday / c.maxTradesPerDay * 100, '#4c8dff');
+  out += gauge('Profit target', `${usd(s.closed)} of ${usd(c.profitTarget)}`, s.progress * 100, '#2bb7d6');
+  out += s.cons == null ? gauge('Best day vs consistency limit', 'no profit yet', 0, '#2bb7d6') : gauge('Best day vs consistency limit', `${s.cons.toFixed(0)}% (limit ${c.consistencyPct}%)`, s.cons / c.consistencyPct * 100, s.cons <= c.consistencyPct ? '#3ee6b0' : '#f27272');
+  out += gauge('Trades today', `${R.nToday} of ${c.maxTradesPerDay}`, R.nToday / c.maxTradesPerDay * 100, '#2bb7d6');
   let clock;
   if (inFlat(bar.mins, c)) clock = 'No-trade window (flat)';
   else { const f = hm(c.flatTime), left = bar.mins >= 1020 ? 1440 - bar.mins + f : f - bar.mins; clock = `${Math.floor(left / 60)}h ${left % 60}m until flat at ${c.flatTime} CT`; }
@@ -84,7 +84,7 @@ function render() {
   if (sim.paused) b += `<div class="banner amber">Paused by the Performance Manager: ${esc(sim.paused)}. <button class="small" onclick="resumePause()">Resume anyway</button></div>`;
   if (sim.i >= sim.bars.length && !isLive()) b += '<div class="banner info">End of data reached.</div>';
   $('banners').innerHTML = b;
-  $('systems').innerHTML = systemsHtml({ sys: h.sys.slice().sort((a, c) => a.name.localeCompare(c.name)) });
+  renderSystems(h.sys.slice().sort((a, c) => a.name.localeCompare(c.name))); setKpis(h);
   $('chart').innerHTML = chartSvg();
   { const cp = curPos(); $('chartNote').textContent = cp ? `${cp.side} ${cp.qty} @ ${p4(cp.entry)}, open P&L ${usd(isLive() ? (sim.realOpen || 0) : sim.ex.openPnl(bar.c))}` : 'flat'; }
   $('ticket').innerHTML = ticketHtml(); $('gauges').innerHTML = gaugesHtml(h);

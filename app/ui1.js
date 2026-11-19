@@ -108,3 +108,49 @@ function systemsHtml(h) {
   }).join('');
 }
 function talkTo(id) { try { chatPick(id); const el = document.getElementById('chatBox'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); const i = document.getElementById('chatIn'); if (i) i.focus(); } catch (e) {} }
+
+// ---- smooth dashboard: arc gauges, KPI strip, systems updated in place ----
+function arcSvg(pct, color) {
+  pct = Math.max(0, Math.min(1, pct || 0)); const L = Math.PI * 38;
+  return `<svg class="arc" viewBox="0 0 92 62" aria-hidden="true"><path class="tr" d="M8 52 A38 38 0 0 1 84 52" fill="none" stroke-width="7" stroke-linecap="round"/><path class="fg" d="M8 52 A38 38 0 0 1 84 52" fill="none" stroke="${color}" style="color:${color}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${L.toFixed(1)}" stroke-dashoffset="${(L * (1 - pct)).toFixed(1)}"/><text x="46" y="50" text-anchor="middle">${Math.round(pct * 100)}%</text></svg>`;
+}
+const kcol = v => v > 0.5 ? '#3ee6b0' : v > 0.25 ? '#f2b84b' : '#f27272';
+function kpiHtml(h) {
+  const c = sim.c, s = h.snap, room = Math.max(0, (c.dailyStop + s.today) / c.dailyStop), okN = h.sys.filter(x => x.status === 'ok').length;
+  const card = (label, val, sub, arc) => `<div class="kpi">${arc || ''}<div><div class="kl">${label}</div><div class="kv">${val}</div><div class="ks">${sub}</div></div></div>`;
+  return card('Account P&amp;L', `<span class="${s.closed >= 0 ? 'pos' : 'neg'}">${usd(s.closed)}</span>`, 'today ' + usd(s.today), '')
+    + card('Loss buffer', usd(s.buffer), 'above the floor', arcSvg(s.bufPct / 100, kcol(s.bufPct / 100)))
+    + card('Daily room', usd(c.dailyStop + s.today), 'to the daily stop', arcSvg(room, kcol(room)))
+    + card('Target', usd(Math.max(0, s.closed)), 'of ' + usd(c.profitTarget), arcSvg(s.progress, '#2bb7d6'))
+    + card('Systems', `${okN}<span class="mut" style="font-size:16px"> / ${h.sys.length}</span>`, 'healthy now', arcSvg(okN / h.sys.length, kcol(okN / h.sys.length)));
+}
+function renderSystems(list) {
+  const box = document.getElementById('systems'); if (!box) return;
+  list.forEach((s, idx) => {
+    let el = document.getElementById('sys-' + s.id); const M = MASCOT[s.id] || MASCOT.scanner;
+    if (!el) { el = document.createElement('div'); el.id = 'sys-' + s.id; el.style.setProperty('--mc', M.c); el.innerHTML = '<div class="mhead"><div class="mwrap"></div><div class="mtxt"></div></div><div class="sbody"></div>'; }
+    if (box.children[idx] !== el) box.insertBefore(el, box.children[idx] || null);
+    el.className = 'sys ' + s.status;
+    const mw = el.querySelector('.mwrap'); if (mw.dataset.st !== s.status) { mw.dataset.st = s.status; mw.innerHTML = mascotSvg(s.id, s.status); }
+    const say = M.say[s.status] || M.say.idle, pillCls = s.status === 'idle' ? '' : s.status;
+    const top = `<h3>${esc(s.name)}<span class="pill ${pillCls}">${STATUS_TXT[s.status]}</span></h3><div class="bubble"><b>${M.nm}:</b> ${esc(say)}</div>`;
+    const mets = s.m.map(([k, v]) => `<div><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join('');
+    const exps = s.e.map(e => `<li>${e.ok === true ? '<span class="ic t">&#10003;</span>' : e.ok === false ? '<span class="ic f">&#10007;</span>' : '<span class="ic n">&middot;</span>'}<span>${esc(e.l)}</span><span class="d">${esc(e.d)}</span></li>`).join('');
+    const body = `<div class="role">${esc(s.role)} <a class="talk" onclick="talkTo('${s.id}')">Talk to ${M.nm}</a></div>${s.id === 'scanner' ? mtfStrip() : ''}<div class="met">${mets}</div><ul class="exp">${exps}</ul>`;
+    const t = el.querySelector('.mtxt'), b = el.querySelector('.sbody'); if (t.__h !== top) { t.innerHTML = top; t.__h = top; } if (b.__h !== body) { b.innerHTML = body; b.__h = body; }
+  });
+  while (box.children.length > list.length) box.removeChild(box.lastChild);
+}
+function setKpis(h) { const el = document.getElementById('kpis'); if (!el) return; const html = kpiHtml(h); if (el.__h === html) return; el.__h = html;
+  if (!el.children.length) { el.innerHTML = html; return; }
+  const tmp = document.createElement('div'); tmp.innerHTML = html;   // update numbers and arcs in place so the arcs glide instead of jumping
+  [...tmp.children].forEach((k, i) => { const cur = el.children[i]; if (!cur) { el.appendChild(k); return; }
+    const a = cur.querySelector('.arc .fg'), na = k.querySelector('.arc .fg'); if (a && na) { a.setAttribute('stroke-dashoffset', na.getAttribute('stroke-dashoffset')); a.setAttribute('stroke', na.getAttribute('stroke')); a.style.color = na.style.color; cur.querySelector('.arc text').textContent = k.querySelector('.arc text').textContent; }
+    cur.lastElementChild.innerHTML = k.lastElementChild.innerHTML; });
+}
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  document.documentElement.style.scrollBehavior = 'smooth';
+  const spy = () => { let cur = null; document.querySelectorAll('.side a[data-sec]').forEach(a => { const t = document.getElementById(a.dataset.sec); if (t && t.offsetParent !== null && t.getBoundingClientRect().top < 140) cur = a; }); document.querySelectorAll('.side a').forEach(a => a.classList.toggle('on', a === cur)); };
+  window.addEventListener('scroll', spy, { passive: true }); setTimeout(spy, 300);
+  document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('.side a[data-sec="liveWrap"]'); if (a && typeof setView === 'function' && typeof view !== 'undefined' && view !== 'live') setView('live'); });
+}
