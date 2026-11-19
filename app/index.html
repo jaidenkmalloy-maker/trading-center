@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trading Control Center (Topstep Live)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="row"><h1>Trading Control Center</h1><span class="row tabs" style="gap:0"><button id="tabReplay" class="small primary" onclick="setView('replay')">Replay</button><button id="tabLive" class="small" onclick="setView('live')">Live (Topstep)</button></span><span id="src" class="pill"></span><span id="overall" class="pill"></span><span id="appVer" class="pill" style="display:none"></span></div>
+  <div class="row">
+    <span class="row" id="replayBtns">
+    <button id="bPlay" class="primary" onclick="togglePlay()">Play</button>
+    <button onclick="stepN(1)">Step</button>
+    <button onclick="stepN(50)">+50</button>
+    <button onclick="runEnd()">Run to end</button>
+    <button onclick="doReset()">Restart</button>
+    <select id="speed" onchange="setSpeed(this.value)"><option value="5">Slow</option><option value="20" selected>Normal</option><option value="60">Fast</option><option value="200">Very fast</option></select>
+    </span>
+    <button id="bKill" class="danger" onclick="toggleKill()">Kill switch</button>
+  </div>
+</header>
+<main><div id="appBanner"></div>
+  <div id="banners"></div>
+  <div class="meta" id="where"></div>
+  <div class="prog"><div id="progBar" style="width:0"></div></div>
+  <section id="liveWrap" class="lv" style="display:none">
+    <div class="panel" style="margin-bottom:14px"><h2>Topstep connection <small id="lvStat"></small></h2>
+      <div id="lvMsg"></div>
+      <div id="connForm" class="form">
+        <label>TopstepX username (not your email)<input id="lvUser" autocomplete="off"></label>
+        <label>API key<input id="lvKey" type="password" autocomplete="off"></label>
+        <label>Instrument<select id="lvSym"><option>MES</option><option>MNQ</option><option>MGC</option><option>MCL</option><option>MHG</option></select></label>
+        <label>Minutes per candle<input id="lvTf" type="number" value="15"></label>
+        <div style="align-self:end"><button class="primary" onclick="lvConnect()">Connect</button></div>
+      </div>
+      <div id="connStep2" class="form" style="display:none">
+        <label>Account<select id="lvAcct"></select></label>
+        <label>Contract<select id="lvContract"></select></label>
+        <div style="align-self:end"><button class="primary" onclick="lvStart()">Download history and start (Watch only)</button></div>
+      </div>
+      <details><summary>Advanced</summary><div class="form"><label>Gateway address<input id="lvBase" value="https://api.topstepx.com"></label></div></details>
+      <div class="note">Your API key stays in this page's memory only: it is never saved, and it is sent only to the gateway address above. It starts in <b>Watch only</b>: nothing can be sent until you choose another mode. Topstep requires automation to run from your own computer (no VPS or remote server) and API orders cannot be reversed.</div>
+    </div>
+    <div id="lvCtlWrap" style="display:none">
+      <div class="panel" style="margin-bottom:14px"><h2>Executor control <small>real orders on your Topstep account</small></h2><div id="lvCtl"></div><div id="lvGate"></div></div>
+      <div class="panel" style="margin-bottom:14px"><h2>Levels <small>the day&#39;s GEX / IV-wall numbers from TradingView</small></h2><div id="lvlBody"></div></div>
+      <div class="panel" style="margin-bottom:14px"><h2>Phone alerts <small>get a message when something happens, even when you are away</small></h2><div id="kpBody"></div></div>
+      <div class="panel" style="margin-bottom:14px"><h2>Broker log <small>what was sent and why</small></h2><div class="scroll" id="lvLog"></div></div>
+    </div>
+  </section>
+  <section class="systems" id="systems"></section>
+  <div class="grid">
+    <div class="panel"><h2>Chart <small id="chartNote"></small></h2><div id="chart"></div>
+      <div class="legend">Amber band = fib entry zone for the active setup &middot; red dotted = stop level &middot; &#9670; setup found &middot; &#9650;/&#9660; entry &middot; &#9679; exit</div></div>
+    <div>
+      <div class="panel" style="margin-bottom:14px"><h2>Order ticket <small id="tkSub">to place by hand in TopstepX</small></h2><div id="ticket"></div></div>
+      <div class="panel"><h2>Rules Manager <small>numbers to watch</small></h2><div id="gauges"></div></div>
+    </div>
+  </div>
+  <div class="panel" id="labPanel" style="margin-bottom:14px"><h2>Strategy Lab <small>the Backtester: tests known strategies on all stored history and approves only what holds up</small></h2><div id="labBody"></div></div>
+  <div class="panel" style="margin-bottom:14px"><h2>Talk to the systems <small>ask what each one is doing and why</small></h2>
+    <div class="ctabs" id="ctabs"></div><div class="chat" id="chatBox"></div>
+    <div class="row"><input id="chatIn" style="flex:1;min-width:200px" placeholder="Ask, for example: why no trade? how much can I lose today? flatten" onkeydown="if(event.key==='Enter')chatAsk()"><button class="primary" onclick="chatAsk()">Ask</button></div>
+    <details><summary>Optional: connect a real AI (Claude) for fuller answers</summary><div class="form"><label>Anthropic API key<input id="aiKey" type="password" autocomplete="off"></label><label>Model<input id="aiModel" value="claude-sonnet-5-5"></label></div>
+    <div class="note">Without a key, the systems answer from their own numbers using fixed rules (not an AI language model). With a key, your question and a snapshot of the app's state (never your Topstep key) go to Anthropic, which bills your Anthropic account. The AI can explain and suggest; it cannot place orders. Commands like flatten or kill always show a button you must click.</div></details>
+  </div>
+  <div class="grid3">
+    <div class="panel"><h2>Decisions <small>every system's reasoning, newest first</small></h2><div class="scroll" id="decisions"></div></div>
+    <div class="panel"><h2>Orders feed <small id="ordSub"></small></h2><div class="scroll" id="orders"></div></div>
+    <div class="panel"><h2>Closed trades <button class="small" onclick="downloadTrades()" style="float:right">Download CSV</button></h2><div class="scroll" id="trades"></div></div>
+  </div>
+  <div class="grid3">
+    <div class="panel"><h2>Performance Manager <small>all systems together</small></h2><div id="perf"></div></div>
+    <div class="panel"><h2>Backtester detail <small>past outcomes of the same setup</small></h2><div id="bt"></div></div>
+  </div>
+  <details open id="dataBox"><summary>Data</summary><div class="panel"><div class="row">
+    <button onclick="newRandom()">New random data</button>
+    <label class="row" style="gap:6px">Load your candles (CSV)<input type="file" accept=".csv,text/csv" onchange="loadCsv(event)"></label>
+  </div>
+  <div class="row" style="margin-top:10px;gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <label>Chart picture (PNG)<input type="file" accept="image/png,image/jpeg" onchange="loadPng(event)"></label>
+    <label>Price of the highest wick<input id="pngHigh" type="number" step="any" style="width:110px"></label>
+    <label>Price of the lowest wick<input id="pngLow" type="number" step="any" style="width:110px"></label>
+    <label>Minutes per candle<input id="pngTf" type="number" value="15" style="width:70px"></label>
+    <label>Last candle's open time (Central)<input id="pngTime" type="text" placeholder="2026-11-19 11:00" style="width:150px"></label>
+  </div>
+  <div class="note">Picture reading is approximate. Crop the screenshot to just the candles (no price labels, icons or tags), red and green candles on a dark background. Hover over the highest and lowest wick on your chart to read their prices, and over the last candle for its time. Fill in the four boxes first, then choose the file. Each price can be off by a few ticks, and the picture holds only a screen of candles, so the backtester will not have enough history to approve trades. Use it to see what the scanner flags; for real testing load a CSV.</div>
+  <div class="note">CSV columns: time, open, high, low, close (15-minute candles, e.g. exported from TradingView). Times without a time zone are read as Central Time. Everything runs inside this page; nothing is uploaded.</div></div></details>
+  <details><summary>Settings (changing one restarts the replay)</summary><div class="panel"><div class="form" id="settings"></div>
+    <div class="row" style="margin-top:10px"><button onclick="resetSettings()">Restore defaults</button></div>
+    <div class="note">Topstep numbers here are my understanding of a 50K Combine. Topstep changes its rules often, so check each one against your own account before trusting a result.</div></div></details>
+</main>
+<script src="engine1.js"></script>
+<script src="engine2.js"></script>
+<script src="engine3.js"></script>
+<script src="engine4.js"></script>
+<script src="engine5.js"></script>
+<script src="engine6.js"></script>
+<script src="engine7.js"></script>
+<script src="ui1.js"></script>
+<script src="ui2.js"></script>
+<script src="ui3.js"></script>
+<script src="ui4.js"></script>
+</body>
+</html>
