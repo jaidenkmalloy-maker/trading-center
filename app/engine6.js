@@ -78,6 +78,21 @@ class LiveRunner {
     if (fresh.length) { this.lastBarAt = now; this.saveStored(this.contract.id, sim.bars); this.maybeLearn(); }
     return fresh.length;
   }
+  async healFeed(age) {   // candles stopped arriving: find out why, and fix it if Topstep's other data feed is current
+    const o = this.o, tfms = o.tf * 60000, now = o.now(), last = this.sim.bars[this.sim.bars.length - 1], fmt = t => new Date(t).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: '2-digit', minute: '2-digit' }) + ' CT';
+    const newest = async live => { try { const b = await this.api.bars(this.contract.id, now - 6 * 3600e3, now, o.tf, live); return b.length ? b[b.length - 1].t : null; } catch (e) { return 'error: ' + e.message; } };
+    try { if (this.cred) await this.api.login(this.cred.user, this.cred.key); } catch (e) { }   // a fresh sign-in first, in case the session went bad
+    const cur = await newest(o.live), other = await newest(!o.live), nm = l => l ? 'live' : 'practice';
+    const desc = x => x == null ? 'nothing' : typeof x === 'string' ? x : 'a candle from ' + fmt(x);
+    let msg = `No new candle for ${Math.round(age / 60)} min (last one ${fmt(last.t)}). Asked Topstep again: the ${nm(o.live)} data feed returned ${desc(cur)}; the ${nm(!o.live)} feed returned ${desc(other)}.`;
+    if (typeof cur === 'number' && cur > last.t) { msg += ' The feed is moving again; catching up now.'; this.lastBars = 0; }
+    else if (typeof other === 'number' && other > last.t + tfms) { o.live = !o.live; this.lastBars = 0; msg += ` Switched to the ${nm(o.live)} feed, which is up to date.`; }
+    else {
+      let roll = ''; try { const cs = await this.api.contracts(this.sym, o.live), act = cs.find(c => c.activeContract && new RegExp('^' + this.sym + '[FGHJKMNQUVXZ]\\d{1,2}$').test(c.name || '')); if (act && act.id !== this.contract.id) roll = ` Topstep now lists ${act.name} as the active contract, so the app needs reconnecting with it.`; } catch (e) { }
+      msg += roll || ' Neither feed has newer candles for this contract right now; the app will keep checking every 5 minutes.';
+    }
+    this.broker.say('error', msg, false); this.feedNote = msg;
+  }
   async pollBalance() { const acc = (await this.api.accounts()).find(a => a.id === this.account.id); if (acc) { this.account = acc; this.lastBalOkAt = this.o.now(); this.sim.syncBalance(acc.balance); if (acc.canTrade === false) this.broker.alert('Topstep says this account can no longer trade.'); } }
   maybeLearn() {
     if (this.barsSinceLearn < 96 || this.learner.running) return; this.barsSinceLearn = 0;
@@ -88,6 +103,7 @@ class LiveRunner {
     try {
       const now = o.now(), last = this.sim.bars[this.sim.bars.length - 1];
       if (now - this.lastBars >= o.barsEvery) { this.lastBars = now; await this.guard(() => this.pollBars()); }
+      const age = this.dataAgeSec(); if (age != null && age > 33 * 60 && !closedHours(now) && now - (this.lastHeal || 0) >= 5 * 60000) { this.lastHeal = now; await this.healFeed(age); }
       if (now - this.lastBal >= o.balEvery) { this.lastBal = now; await this.guard(() => this.pollBalance()); }
       if ((this.broker.state || this.broker.unmanaged) && now - (this.lastPx || 0) >= 10000) { this.lastPx = now; try { const nb = await this.api.bars(this.contract.id, now - 15 * 60000, now, 1, o.live, 3, true); if (nb.length) { this.livePrice = nb[nb.length - 1].c; this.livePriceAt = now; } } catch (e) { } }
       if (now - this.lastMgr >= o.mgrEvery) { this.lastMgr = now; await this.broker.manage(this.livePrice != null && now - this.livePriceAt < 60000 ? this.livePrice : last.c); }

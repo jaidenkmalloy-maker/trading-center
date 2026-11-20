@@ -1,6 +1,6 @@
 {
-  "version": "1.6.0",
-  "notes": "Download long history: 2 years hourly and 20+ years daily from Yahoo",
+  "version": "1.6.1",
+  "notes": "When candles stop, the app checks Topstep's other data feed, explains, and recovers",
   "files": {
     "app/index.html": "b921dcf99c831074d526e5fa5192a343262626f950c1d094a86f6dcb7476d48b",
     "app/style.css": "0aacb726f96a57e9357547589591cef24dd7a4f72b953ea9f4802e327a489579",
@@ -10,7 +10,7 @@
     "app/engine3.js": "15b839f55ff9a0c7933ee16977690513fe0925d9df4daca7f89f5a9fb6e6233e",
     "app/engine4.js": "8407e4c56d4bb0df0a01d0f33aecd42b7c05608ff367af2ad1679a1d761b742b",
     "app/engine5.js": "eccae3d3a1fecf4f0a29b7700e045ac9540b5a013209f37da15ca09bb1a45975",
-    "app/engine6.js": "99b5167c750bf2ca1f92d85f197e3af1381b8f5ed6a9eaa3cb12e1c14a5d6a53",
+    "app/engine6.js": "1a4e13c02d8aa720d2587f8c34adf6e0330d60983d24ba042cd292495746b6a3",
     "app/engine7.js": "a4ef9adb6664cb507cba41323a9ba67cc11df61926ef22ed2737c414a2fc732c",
     "app/ui1.js": "750aa8fc5991050aab8ff9b98397c9d655be539cc8ddd15157a2309d20e0251c",
     "app/ui2.js": "98eee27c832f1410a2d0ebe8bc9372a214431024878f35f7a676f461e04b9761",
