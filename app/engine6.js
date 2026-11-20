@@ -67,7 +67,7 @@ class LiveRunner {
     if (!Array.isArray(cfg.strategies)) cfg.strategies = [];     // live: trade only what the Backtester approves
     this.sim = new LiveSim(bars, cfg); this.broker = new Broker(this.api, this.sim, { mode: 'watch', accountId, contract, tf: o.tf, now: o.now });
     this.sim.initAccount(this.account.balance); this.learner = new Lab(this.sim); this.sim.lab = this.learner; { const st = this.o.store, k = 'probation_' + symbol, old = 'probation_' + contract.id; try { if (!st.get(k) && st.get(old)) st.set(k, st.get(old)); } catch (e) { } }   // keyed by market, so it survives the quarterly contract roll
-    this.probation = new Probation(this.sim, this.o.store, 'probation_' + symbol); this.sym = symbol; this.markets = new MarketWatch(this, this.o.scanList); this.loadHist(); this.lastSave = this.o.now(); this.broker.onTradeClosed = () => this.saveHist(); if (this.startStream) this.startStream(); if (this.probation.promoted.length) this.sim.setStrategies(this.probation.promoted.slice()); this.sim.onStrategies = l => this.onLearned && this.onLearned({ strategies: l }); this.status = 'running'; this.lastBars = this.lastMgr = this.lastBal = now;
+    this.probation = new Probation(this.sim, this.o.store, 'probation_' + symbol); this.sym = symbol; this.markets = new MarketWatch(this, this.o.scanList); this.loadHist(); this.lastSave = this.o.now(); this.broker.onTradeClosed = () => this.saveHist(); if (this.gexOnlySaved()) this.setGexOnly(true); if (this.startStream) this.startStream(); if (this.probation.promoted.length) this.sim.setStrategies(this.probation.promoted.slice()); this.sim.onStrategies = l => this.onLearned && this.onLearned({ strategies: l }); this.status = 'running'; this.lastBars = this.lastMgr = this.lastBal = now;
     this.sim.note(this.sim.i - 1, 'scanner', 'info', `Live data loaded: ${bars.length} candles (${stored ? 'stored history plus new' : 'fresh download'}). Contract ${contract.name}, tick ${contract.tickSize}, $${(contract.tickValue / contract.tickSize).toFixed(2)} per point.`, true);
     return this.sim;
   }
@@ -78,6 +78,22 @@ class LiveRunner {
     if (fresh.length) { this.lastBarAt = now; this.saveStored(this.contract.id, sim.bars); this.maybeLearn(); }
     return fresh.length;
   }
+  // ---- GEX-only mode: trade only the GEX levels, 1 contract, at most 2 trades a day; everything else stands aside ----
+  setGexOnly(on) {
+    const S = this.sim, c = S.c, st = this.o.store; let saved = {}; try { saved = JSON.parse(st.get('gexonly') || '{}'); } catch (e) { }
+    if (on) {
+      const prev = saved.on ? saved.prev : { maxContracts: c.maxContracts, maxTradesPerDay: c.maxTradesPerDay, gate: c.gate, learnMode: this.o.learnMode };
+      const p = { k: 1, m: 2, use: 'all', mtf: 0, posOnly: 1 }, g = { id: 'lvl', params: p, key: stratKey('lvl', p), label: 'GEX levels: bounce at the walls on positive-gamma days' };
+      c.maxContracts = 1; c.maxTradesPerDay = 2; c.gate = 'off'; this.o.learnMode = 'off'; this.o.scanMarkets = false; S.gexOnly = true;
+      S.setStrategies([g]); st.set('gexonly', JSON.stringify({ on: true, prev }));
+      S.note(Math.max(0, S.i - 1), 'scanner', 'mode', 'GEX-only mode on: trading only the GEX levels, 1 contract, at most 2 trades a day, positive-gamma days only.', true);
+    } else {
+      const prev = saved.prev || {}; if (prev.maxContracts != null) c.maxContracts = prev.maxContracts; if (prev.maxTradesPerDay != null) c.maxTradesPerDay = prev.maxTradesPerDay; if (prev.gate) c.gate = prev.gate;
+      this.o.learnMode = prev.learnMode || 'suggest'; this.o.scanMarkets = true; S.gexOnly = false; S.setStrategies((this.probation && this.probation.promoted || []).slice());
+      st.set('gexonly', JSON.stringify({ on: false })); S.note(Math.max(0, S.i - 1), 'scanner', 'mode', 'GEX-only mode off: back to the Strategy Lab\'s choices.', true);
+    }
+  }
+  gexOnlySaved() { try { return !!JSON.parse(this.o.store.get('gexonly') || '{}').on; } catch (e) { return false; } }
   async healFeed(age) {   // candles stopped arriving: find out why, and fix it if Topstep's other data feed is current
     const o = this.o, tfms = o.tf * 60000, now = o.now(), last = this.sim.bars[this.sim.bars.length - 1], fmt = t => new Date(t).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: '2-digit', minute: '2-digit' }) + ' CT';
     const newest = async live => { try { const b = await this.api.bars(this.contract.id, now - 6 * 3600e3, now, o.tf, live); return b.length ? b[b.length - 1].t : null; } catch (e) { return 'error: ' + e.message; } };

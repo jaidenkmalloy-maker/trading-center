@@ -18,6 +18,7 @@ function kpWatch() {   // once per tick: connection trouble and the end-of-day r
   const r = runner; if (!r || !sim || runner.sim !== sim) return;
   try { const L = r.learner; if (L && L.lastRunAt !== KP.labShown) { KP.labShown = L.lastRunAt; labRender(); } } catch (e) { }
   try { mktRender(); } catch (e) { }
+  try { gexModeRender(); } catch (e) { }
   try {   // live market data status, and a text only if it stays down for 2 minutes
     const S = r.stream ? r.stream.status() : null, el = document.getElementById('rtStatus');
     if (S && el) { const age = S.tickAgeSec; el.innerHTML = S.state === 'live' ? `<span class="pos">&#9679;</span> Live market data: connected${age != null ? ' · last price ' + (age < 60 ? age + ' s' : Math.round(age / 60) + ' min') + ' ago' : ' · waiting for the first price'}${r.livePrice != null ? ' · ' + r.livePrice : ''}` : S.state === 'unavailable' ? 'Live market data is not available here; using Topstep\'s candle history only.' : `<span class="neg">&#9679;</span> Live market data: ${S.state === 'connecting' ? 'connecting…' : 'reconnecting…'}${S.lastError ? ' (' + esc(S.lastError.m) + ')' : ''}`; }
@@ -306,3 +307,17 @@ async function exportLong() {
   } catch (e) { EXP.msg = 'Download stopped: ' + e.message; }
   finally { EXP.busy = false; expRender(); }
 }
+
+// ---- GEX mode panel ----
+function gexModeHtml() {
+  const r = runner, on = !!(r && r.sim && r.sim.gexOnly), day = lvToday(), L = LV.byDay[day], R = r && r.sim ? r.sim.rules : null, mode = r && r.broker ? r.broker.o.mode : 'watch';
+  const lv = L && L.lv ? L.lv.map(x => ({ call: 'Call wall', put: 'Put wall', flip: 'Flip', ivHi: 'IV high', ivLo: 'IV low' }[x.k] + ' ' + x.p)).join(' · ') : 'no levels yet for today';
+  const reg = L && L.regime ? L.regime : (L ? 'unknown (typed by hand)' : '-'), trading = reg !== 'negative';
+  let h = `<div class="row"><button class="${on ? '' : 'primary'}" onclick="gexToggle()">${on ? 'Turn GEX mode off' : 'Turn GEX mode on'}</button><span class="pill ${on ? 'ok' : ''}">${on ? 'ON' : 'OFF'}</span></div>`;
+  h += `<div class="gmrow"><div><span class="mut">Today's gamma</span><b class="${reg === 'positive' ? 'pos' : reg === 'negative' ? 'neg' : ''}">${esc(reg)}</b></div><div><span class="mut">Trades today</span><b>${R ? R.nToday : 0} of ${on ? 2 : (r && r.sim ? r.sim.c.maxTradesPerDay : '-')}</b></div><div><span class="mut">Size</span><b>${on ? '1 contract' : '-'}</b></div><div><span class="mut">Orders go to Topstep</span><b class="${mode === 'auto' || mode === 'confirm' ? 'pos' : 'neg'}">${mode === 'auto' ? 'yes, automatically' : mode === 'confirm' ? 'after you approve' : 'no (' + esc(MODE_TXT[mode] || mode) + ')'}</b></div></div>`;
+  h += `<div class="note">Levels in MES prices: ${esc(lv)}.<br>${on ? (trading ? 'It buys a bounce off the put wall or IV low and sells a rejection at the call wall or IV high (and either side of the flip), each level at most once a day.' : 'Negative gamma today: walls tend to break, so it stands aside.') + (mode === 'auto' || mode === 'confirm' ? '' : ' <b>To send real orders, choose Automatic (or Confirm) in Executor control below.</b>') : 'When on: only the GEX strategy trades, 1 contract, at most 2 trades a day, positive-gamma days only. Other markets and Strategy Lab changes are paused. Your loss limits stay in force.'}</div>`;
+  return h;
+}
+function gexModeRender() { const el = document.getElementById('gexModeBody'); if (!el || !runner || !runner.sim) return; setHtml('gexModeBody', gexModeHtml()); const p = document.getElementById('gexPanel'); if (p) p.classList.toggle('on', !!runner.sim.gexOnly); }
+function gexToggle() { if (!runner || !runner.sim) return; if (runner.broker && runner.broker.busy()) { alertMsg('Not while a trade is open or pending.'); return; } runner.setGexOnly(!runner.sim.gexOnly); gexModeRender(); try { lvRender(); labRender(); render(); } catch (e) { } }
+function alertMsg(m) { try { userMsg = m; render(); } catch (e) { } }

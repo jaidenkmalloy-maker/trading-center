@@ -53,6 +53,7 @@ class LvlStrat {   // trades the bounce or rejection at the daily option levels 
     const bar = this.b[i], c = this.c, p = this.p, L = c.levelsByDay && c.levelsByDay[bar.day];
     if (bar.day !== this.day) { this.day = bar.day; this.fired = {}; }
     if (!L || !L.lv || !L.lv.length || i < 30 || !winOk(bar, c)) return null;
+    if (p.posOnly && L.regime === 'negative') return null;   // walls hold best when dealers are long gamma
     const atr = this.ind.atr[i], tol = 0.15 * atr;
     for (const l of L.lv) {
       const P = +l.p; if (!(P > 0) || this.fired[l.k]) continue; if (p.use === 'walls' && l.k !== 'put' && l.k !== 'call') continue;
@@ -214,7 +215,7 @@ class Lab {
     } finally { this.running = false; }
   }
   apply(extra) {
-    const p = this.proposal; if (!p) return false; const list = p.approved.map(a => ({ id: a.id, params: a.params, key: a.key, label: a.label }));
+    const p = this.proposal; if (!p || this.sim.gexOnly) return false;   /* in GEX-only mode the Lab advises but never changes what trades */ const list = p.approved.map(a => ({ id: a.id, params: a.params, key: a.key, label: a.label }));
     for (const s of this.sim.promoted || []) if (!list.some(x => x.key === s.key)) list.push(s);   // strategies that earned their place on probation stay
     this.sim.setStrategies(list); this.proposal = null; this.history.unshift({ at: Date.now(), applied: true, to: list.map(s => s.label) });
     this.sim.note(Math.max(0, this.sim.i - 1), 'backtester', 'approve', list.length ? 'Strategies now in use: ' + list.map(s => s.label).join('; ') : 'No strategy approved: the Scanner is standing down.', list.length > 0);
