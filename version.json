@@ -1,20 +1,20 @@
 {
-  "version": "1.2.0",
-  "notes": "Probation lane; app opens straight to Live; old replay and import tools removed",
+  "version": "1.3.0",
+  "notes": "Scans every Topstep market; keeps working on paper during your own trades",
   "files": {
-    "app/index.html": "f3eadbe7e5645f1690ecc00ede493a0ff38c7b535bb75836a4371a28f22bc96b",
-    "app/style.css": "65fb47cff69f8fee5f3238a30561cb5553bb30ee9cd33df8a6faa68ac388e949",
+    "app/index.html": "9fc2f64298f04eb2c8734dd64aafd19d04379e531e410d3c0ff19bd752b8e9e9",
+    "app/style.css": "0aacb726f96a57e9357547589591cef24dd7a4f72b953ea9f4802e327a489579",
     "app/engine1.js": "781e62eaaf3b39771b97694ab8b0a750cb03155ff029541609a289d18b717be0",
     "app/engine2.js": "296c05b46bf0f99fa5778676e4a7607321a234a01394458d6e75b13adc03c3c0",
     "app/engine3.js": "15b839f55ff9a0c7933ee16977690513fe0925d9df4daca7f89f5a9fb6e6233e",
     "app/engine4.js": "8407e4c56d4bb0df0a01d0f33aecd42b7c05608ff367af2ad1679a1d761b742b",
-    "app/engine5.js": "578a42b2a078d867dcafca3c8280f765f6369d7a362265bf07781841608722ae",
-    "app/engine6.js": "7707fc3c50b55f3da57bc43777abff49d65fa320b8a97fd4faa87f537f14cc8e",
+    "app/engine5.js": "49a8e969ebbc1305979dd460f985b513850093e2c0b17bbe881df45fe91ebaca",
+    "app/engine6.js": "e27340f7beae11489a18f71bdb7906c64e93a5b5b205fcbd8f97a9ecd3c59ad0",
     "app/engine7.js": "a4ef9adb6664cb507cba41323a9ba67cc11df61926ef22ed2737c414a2fc732c",
     "app/ui1.js": "750aa8fc5991050aab8ff9b98397c9d655be539cc8ddd15157a2309d20e0251c",
     "app/ui2.js": "98eee27c832f1410a2d0ebe8bc9372a214431024878f35f7a676f461e04b9761",
     "app/ui3.js": "30a26acafa45236c5a7776d6028f17e7701b653d8c0af7ce44e7858e40ac02a8",
-    "app/ui4.js": "2433b4cafb04d7109efc2037234c757c602c38c949d0683a08695901845b76f8",
+    "app/ui4.js": "0650ce362aa7b4d116f2eb6a00d123318f43669b0c4fae59b211f54079434dfd",
     "server.js": "1379de9fbca905c98ac183107abedfc6ffc9da397bcb2457dc63906bc57af61d",
     "gex.js": "0c48b1b21c073f479aa5279b60ecb13471831e82f9f598c29c513c39848db8c4"
   }

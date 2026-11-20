@@ -176,6 +176,7 @@ class Broker {
   request(t, sig, i) {
     const o = this.o, bar = this.sim.bars[i] || {}, age = o.now() - ((bar.t || 0) + o.tf * 60000);
     if (o.mode === 'watch') { this.say('skip', `Approved ${t.side} ${t.qty} (stop ${t.stop}, target ${t.target}); Watch only mode, nothing sent.`, null); return; }
+    if (this.unmanaged) { this.say('skip', `Approved ${t.side} ${t.qty} (stop ${t.stop}, target ${t.target}); you have your own trade open, so this one is tracked on paper only (nothing sent).`, null); return; }
     if (age > o.staleSec * 1000) { this.say('skip', `Signal skipped: it is ${Math.round(age / 1000)}s old (limit ${o.staleSec}s). Prices may have moved.`, false); return; }
     const p = this.payloads(t);
     if (o.mode === 'dry') { this.dry.push({ t: o.now(), t_: t, p }); this.say('dry', `DRY RUN: would send ${t.side} ${t.qty} at market, then stop ${t.stop} and target ${t.target}. Nothing was sent.`, null); return; }
@@ -262,7 +263,7 @@ class Broker {
     } else {
       if (pos) {
         if (this.lastClose && o.now() - this.lastClose < 20000 && !this.unmanaged && pos.size === this.lastQty) { await this.emergency('a position appeared seconds after the bot closed one, same size (possible double fill)'); return; }
-        if (!this.unmanaged) this.say('manual', `Your own trade: ${this.dirOfType(pos.type) || ''} ${pos.size} @ ${pos.averagePrice}. The bot leaves it alone and keeps scanning; it will not open trades of its own on this contract until yours is closed.`, null);
+        if (!this.unmanaged) this.say('manual', `Your own trade: ${this.dirOfType(pos.type) || ''} ${pos.size} @ ${pos.averagePrice}. The bot leaves it alone, keeps scanning, and tracks its own setups on paper until yours is closed.`, null);
         this.unmanaged = pos;
         if (this.flatReq) await this.flatten(this.flatReq);
       } else {

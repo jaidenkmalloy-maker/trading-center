@@ -17,6 +17,7 @@ function kpFromNote(sys, kind, msg) { if ((sys === 'rules' && kind === 'halt') |
 function kpWatch() {   // once per tick: connection trouble and the end-of-day report
   const r = runner; if (!r || !sim || runner.sim !== sim) return;
   try { const L = r.learner; if (L && L.lastRunAt !== KP.labShown) { KP.labShown = L.lastRunAt; labRender(); } } catch (e) { }
+  try { mktRender(); } catch (e) { }
   if (r.lastError) { if (!KP.errSince) KP.errSince = Date.now(); if (Date.now() - KP.errSince > 60000) kpSend('Problem', 'Connection trouble for over a minute: ' + r.lastError, 4); } else KP.errSince = null;
   const now = new Date(), ct = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' })), day = ct.toDateString(), mins = ct.getHours() * 60 + ct.getMinutes(), R = sim.rules;
   if (KP.day !== day) { KP.day = day; KP.dayStart = R.closed || 0; }
@@ -30,7 +31,8 @@ function keepTicker(fn, ms) {   // a background worker drives the ticks, so the 
   return { stop() { if (w) w.terminate(); if (iv) clearInterval(iv); } };
 }
 function kpStartLive(r) {
-  r.broker.onLog = kpFromBroker; r.sim.onNote = kpFromNote; kpWake(); syncOffline(); setTimeout(() => gxSync(false), 500);
+  r.broker.onLog = kpFromBroker; r.sim.onNote = kpFromNote; kpWake(); syncOffline();
+  if (r.markets) r.markets.onSignal = (m, a) => kpSend('Setup on ' + m.sym, `${a.dir} (${a.name}): entry about ${a.entry}, stop ${a.stop}, target ${a.target}. Paper only, not traded.`, 3); setTimeout(() => gxSync(false), 500);
   return keepTicker(() => { r.tick(); kpWatch(); if (IS_APP && Date.now() - GX.syncedAt > 15 * 60000) gxSync(false); }, 3000);
 }
 function kpRender() {
@@ -166,3 +168,20 @@ function probDrop(key) { if (runner && runner.probation && runner.probation.drop
 // ---- the app opens straight to Live; the dashboard appears once connected ----
 function syncOffline() { try { document.body.classList.toggle('offline', !(isLive() && runner && runner.sim && runner.sim === sim)); } catch (e) { } }
 if (typeof document !== 'undefined') { try { setView('live'); } catch (e) { } syncOffline(); }
+
+// ---- Markets table: every other Topstep market, scanned and tested on paper ----
+function mktRender() {
+  const el = document.getElementById('mktBody'); if (!el || !runner || !runner.markets) return; const W = runner.markets, S = W.summary();
+  const chip = v => `<span class="tf ${v > 0 ? 'up' : v < 0 ? 'dn' : 'fl'}">${v > 0 ? '&#9650;' : v < 0 ? '&#9660;' : '&#9644;'}</span>`;
+  const order = { ready: 0, testing: 0, loading: 1, queued: 2, thin: 3, absent: 4 };
+  const rows = W.m.slice().sort((a, b) => ((b.sim && (b.sim.c.strategies || []).length) ? 1 : 0) - ((a.sim && (a.sim.c.strategies || []).length) ? 1 : 0) || order[a.status] - order[b.status] || a.sym.localeCompare(b.sym));
+  let h = `<div class="note" style="margin:0 0 8px">Scanning <b>${S.live}</b> markets${S.absent ? ` (${S.absent} not offered on your account)` : ''} · <b>${S.approved}</b> with a strategy that passed the Lab. The first full round of testing takes a while; it runs one market at a time in the background. Setups found here are alerts and paper results only: the bot only ever trades your main market (${esc(runner.sym || '')}).</div>`;
+  h += `<table class="nw"><thead><tr><th>Market</th><th>Price</th><th>15m 1h 4h D</th><th>Strategy Lab</th><th>Latest setup</th></tr></thead><tbody>`;
+  for (const m of rows) {
+    if (m.status === 'absent') continue;
+    const last = m.sim ? m.sim.bars[m.sim.bars.length - 1] : null, ap = m.sim ? (m.sim.c.strategies || []) : [], a = m.alerts[0];
+    const lab = m.status === 'testing' ? `testing… ${Math.round((m.lab.progress || 0) * 100)}%` : !m.sim ? esc(m.note) : ap.length ? `<span class="pos">approved: ${esc(ap.map(x => STRATS[x.id].name).join(', '))}</span>` : m.saved ? '<span class="mut">nothing passed' + (m.saved.best && m.saved.best.exp > 0 ? ' (closest: ' + esc(m.saved.best.label || '') + ')' : '') + '</span>' : '<span class="mut">waiting to be tested</span>';
+    h += `<tr><td><b>${esc(m.sym)}</b> <span class="mut">${esc(m.contract ? m.contract.name : '')}</span></td><td>${last ? Number(last.c.toFixed(Math.min(m.sim.c.dec, 6))).toLocaleString('en-US', { maximumFractionDigits: 6 }) : '-'}</td><td>${m.trend ? chip(m.trend.m15) + chip(m.trend.h1) + chip(m.trend.h4) + chip(m.trend.d1) : '-'}</td><td style="white-space:normal;min-width:220px">${lab}</td><td>${a ? `<span class="tag ${a.dir === 'long' ? 'good' : 'bad'}">${a.dir}</span> ${esc(fmtT(a.t))} · ${esc(a.name)}` : '<span class="mut">none yet</span>'}</td></tr>`;
+  }
+  setHtml('mktBody', h + '</tbody></table>');
+}

@@ -38,7 +38,7 @@ class LiveRunner {
     for (const k of Object.keys(cfg)) if (cfg[k] === undefined) delete cfg[k];
     if (!Array.isArray(cfg.strategies)) cfg.strategies = [];     // live: trade only what the Backtester approves
     this.sim = new LiveSim(bars, cfg); this.broker = new Broker(this.api, this.sim, { mode: 'watch', accountId, contract, tf: o.tf, now: o.now });
-    this.sim.initAccount(this.account.balance); this.learner = new Lab(this.sim); this.sim.lab = this.learner; this.probation = new Probation(this.sim, this.o.store, 'probation_' + contract.id); if (this.probation.promoted.length) this.sim.setStrategies(this.probation.promoted.slice()); this.sim.onStrategies = l => this.onLearned && this.onLearned({ strategies: l }); this.status = 'running'; this.lastBars = this.lastMgr = this.lastBal = now;
+    this.sim.initAccount(this.account.balance); this.learner = new Lab(this.sim); this.sim.lab = this.learner; this.probation = new Probation(this.sim, this.o.store, 'probation_' + contract.id); this.sym = symbol; this.markets = new MarketWatch(this, this.o.scanList); if (this.probation.promoted.length) this.sim.setStrategies(this.probation.promoted.slice()); this.sim.onStrategies = l => this.onLearned && this.onLearned({ strategies: l }); this.status = 'running'; this.lastBars = this.lastMgr = this.lastBal = now;
     this.sim.note(this.sim.i - 1, 'scanner', 'info', `Live data loaded: ${bars.length} candles (${stored ? 'stored history plus new' : 'fresh download'}). Contract ${contract.name}, tick ${contract.tickSize}, $${(contract.tickValue / contract.tickSize).toFixed(2)} per point.`, true);
     return this.sim;
   }
@@ -62,6 +62,7 @@ class LiveRunner {
       if (now - this.lastBal >= o.balEvery) { this.lastBal = now; await this.guard(() => this.pollBalance()); }
       if ((this.broker.state || this.broker.unmanaged) && now - (this.lastPx || 0) >= 10000) { this.lastPx = now; try { const nb = await this.api.bars(this.contract.id, now - 15 * 60000, now, 1, o.live, 3, true); if (nb.length) { this.livePrice = nb[nb.length - 1].c; this.livePriceAt = now; } } catch (e) { } }
       if (now - this.lastMgr >= o.mgrEvery) { this.lastMgr = now; await this.broker.manage(this.livePrice != null && now - this.livePriceAt < 60000 ? this.livePrice : last.c); }
+      if (this.markets && this.o.scanMarkets !== false) { try { this.markets.tick(now); } catch (e) { } }
       this.sim.audit(now, this.dataAgeSec(), { balAgeSec: this.lastBalOkAt ? (now - this.lastBalOkAt) / 1000 : null });
       this.lastError = null;
     } catch (e) { this.lastError = e.message; this.broker.err(e.message); }
@@ -141,4 +142,78 @@ function assistantReply(sysId, q, ctx) {
   } else if (S && (has('status', 'ok', 'health', 'how') || !out.length)) { const f = fails(S); out.push(`${S.name} is ${STATUS_TXT[S.status]}.` + (f.length ? ' Problems: ' + f.join('; ') + '.' : ' All its expectations are met or not yet testable.')); }
   if (!out.length) out.push('Ask me about status, why something happened, my numbers, or tell me to pause / flatten / kill.');
   return { text: out.join(' '), action: null };
+}
+
+// ---- Market watch: every other Topstep market gets its own scanner and Strategy Lab (paper only; nothing is traded) ----
+const SCAN_LIST = ['MNQ', 'MYM', 'M2K', 'NKD', 'MCL', 'QM', 'NG', 'QG', 'MGC', 'SIL', 'MHG', 'PL', 'M6E', 'M6A', 'M6B', '6J', '6C', '6S', '6M', 'ZT', 'ZF', 'ZN', 'ZB', 'UB', 'ZC', 'ZS', 'ZW', 'ZL', 'ZM', 'HE', 'LE', 'MBT', 'MET'];
+class MarketWatch {
+  constructor(runner, list) {
+    this.r = runner; this.list = (list || SCAN_LIST).filter(s => s !== runner.sym);
+    this.m = this.list.map(sym => ({ sym, status: 'queued', note: 'waiting its turn', contract: null, live: null, sim: null, lab: null, lastPoll: 0, alerts: [], seen: 0, trend: null, newBars: 0 }));
+    this.busy = false; this.labBusy = false; this.onSignal = null; this.loadIdx = 0;
+  }
+  store() { return this.r.o.store; }
+  async find(sym) {
+    const re = new RegExp('^' + sym + '[FGHJKMNQUVXZ]\\d{1,2}$', 'i');
+    for (const live of [this.r.o.live, !this.r.o.live]) {
+      let l = []; try { l = await this.r.api.contracts(sym, live); } catch (e) { continue; }
+      const hit = l.filter(c => re.test(String(c.name || ''))), act = hit.filter(c => c.activeContract);
+      if (act.length || hit.length) return { c: act[0] || hit[0], live };
+    }
+    return null;
+  }
+  cfgFor(c, sym) {
+    const base = Object.assign({}, this.r.sim.c); delete base.levelsByDay;
+    const dec = Math.max(0, Math.min(6, (String(c.tickSize).split('.')[1] || '').length));
+    return Object.assign(base, { symbol: sym, tick: c.tickSize, mult: c.tickValue / c.tickSize, dec, fee: c.tickValue <= 1.25 ? 0.5 : 2.5, strategies: [] });   // fees are estimates per side
+  }
+  async load(m) {
+    m.status = 'loading'; m.note = 'looking it up on Topstep';
+    const f = await this.find(m.sym); if (!f) { m.status = 'absent'; m.note = 'not offered on your account'; return; }
+    m.contract = f.c; m.live = f.live; m.note = 'downloading history';
+    const o = this.r.o, now = o.now(), tfms = o.tf * 60000;
+    const raw = await this.r.api.bars(f.c.id, now - o.histDays * 864e5, now, o.tf, f.live);
+    const bars = annotate(raw.filter(b => b.t + tfms <= now).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c })));
+    if (bars.length < 300) { m.status = 'thin'; m.note = 'too little history (' + bars.length + ' candles)'; return; }
+    m.sim = new Sim(bars, this.cfgFor(f.c, m.sym));
+    try { const sv = JSON.parse(this.store().get('mktlab_' + m.sym) || 'null'); if (sv && sv.approved && sv.approved.length) m.sim.setStrategies(sv.approved); m.saved = sv; } catch (e) { }
+    while (m.sim.step()); m.seen = m.sim.sigs.length; m.trend = mtfView(m.sim.bars, m.sim.bars.length);
+    m.lab = new Lab(m.sim); m.status = 'ready'; m.note = ''; m.lastPoll = now;
+  }
+  async poll(m) {
+    const o = this.r.o, now = o.now(), tfms = o.tf * 60000, last = m.sim.bars[m.sim.bars.length - 1];
+    const nb = await this.r.api.bars(m.contract.id, last.t - 3 * tfms, now, o.tf, m.live), fresh = annotate(nb.filter(b => b.t > last.t && b.t + tfms <= now).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c })));
+    for (const b of fresh) { m.sim.bars.push(b); m.newBars++; } while (m.sim.step());
+    if (fresh.length) m.trend = mtfView(m.sim.bars, m.sim.bars.length);
+    const recs = m.sim.sigs.slice(m.seen); m.seen = m.sim.sigs.length;
+    for (const rec of recs) if (rec.decision === 'approved') { const s = rec.sig, a = { t: s.t, dir: s.dir, name: s.name || 'setup', stop: s.stop, target: s.target, entry: s.planned }; m.alerts.unshift(a); if (m.alerts.length > 20) m.alerts.pop(); if (this.onSignal) this.onSignal(m, a); }
+    m.lastPoll = now;
+  }
+  async runLab(m) {
+    this.labBusy = true; m.status = 'testing';
+    try {
+      const res = await m.lab.run({ yieldEvery: 2 }); m.newBars = 0;
+      if (res) {
+        const list = res.approved.map(a => ({ id: a.id, params: a.params, key: a.key, label: a.label }));
+        m.sim.setStrategies(list); while (m.sim.step()); m.seen = m.sim.sigs.length; m.lab.proposal = null;
+        m.saved = { at: Date.now(), approved: list, why: res.why, best: res.perStrategy.filter(p => p.selN).sort((a, b) => b.t - a.t)[0] || null };
+        try { this.store().set('mktlab_' + m.sym, JSON.stringify({ at: m.saved.at, approved: list, why: res.why, best: m.saved.best && { label: m.saved.best.label, exp: m.saved.best.exp, pTP: m.saved.best.pTP, t: m.saved.best.t } })); } catch (e) { }
+      }
+    } catch (e) { m.note = 'Lab failed: ' + e.message; }
+    finally { m.status = 'ready'; this.labBusy = false; }
+  }
+  tick(now) {   // called often; does one small step at a time so the main market always comes first
+    if (this.busy || this.r.broker.executing || this.r.broker.pending) return;
+    const tfms = this.r.o.tf * 60000, job = (() => {
+      const q = this.m.find(m => m.status === 'queued'); if (q) return () => this.load(q);
+      const due = this.m.find(m => m.status === 'ready' && now - m.lastPoll > tfms / 3 && now - m.sim.bars[m.sim.bars.length - 1].t >= 2 * tfms + 20000); if (due) return () => this.poll(due);
+      return null;
+    })();
+    if (job) { this.busy = true; job().catch(e => { const m = this.m.find(x => x.status === 'loading'); if (m) { m.status = 'queued'; m.note = 'retrying: ' + e.message; } }).finally(() => { this.busy = false; }); }
+    if (!this.labBusy && !this.r.learner.running) {
+      const stale = this.m.find(m => m.status === 'ready' && (!m.saved || Date.now() - m.saved.at > 20 * 3600e3 || m.newBars >= 96));
+      if (stale) this.runLab(stale);
+    }
+  }
+  summary() { const live = this.m.filter(m => m.sim); return { total: this.m.length, live: live.length, approved: live.filter(m => (m.sim.c.strategies || []).length).length, absent: this.m.filter(m => m.status === 'absent').length }; }
 }
