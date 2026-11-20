@@ -297,7 +297,7 @@ class Broker {
     } catch (e) { this.err('Could not confirm the exit price (' + e.message + '); using the last price.'); }
     const s = st.dir === 'long' ? 1 : -1, gross = (exit - st.entry) * s, pnl = gross * c.mult * st.qty - 2 * c.fee * st.qty, i = sim.bars.length - 1;
     const tr = { strat: st.strat, openI: st.openI, closeI: i, t: bar ? bar.t : this.o.now(), openT: st.openedAt, side: st.dir === 'long' ? 'Buy' : 'Sell', qty: st.qty, entry: st.entry, exit, reason, pnl, r: gross / Math.max(Math.abs(st.entry - st.stop), c.tick), day: bar ? bar.day : '' };
-    sim.ex.trades.push(tr); this.state = null; this.lastClose = this.o.now(); this.lastQty = tr.qty; sim.realOpen = 0;
+    sim.ex.trades.push(tr); this.state = null; this.lastClose = this.o.now(); this.lastQty = tr.qty; sim.realOpen = 0; if (this.onTradeClosed) try { this.onTradeClosed(tr); } catch (e) { }
     sim.note(i, 'executor', 'exit', `REAL ${tr.side === 'Buy' ? 'Long' : 'Short'} ${tr.qty} closed (${reason}) @ ${exit}, about ${usd(pnl)}`, pnl >= 0);
     this.say('exit', `Position closed (${reason}) @ ${exit}, about ${usd(pnl)}. The balance from Topstep is the final word.`, pnl >= 0);
   }

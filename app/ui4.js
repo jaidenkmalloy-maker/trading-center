@@ -185,3 +185,8 @@ function mktRender() {
   }
   setHtml('mktBody', h + '</tbody></table>');
 }
+
+// ---- the chat history is remembered too ----
+try { const c0 = JSON.parse(localStorage.getItem('ccL_chats') || 'null'); if (c0 && typeof c0 === 'object') { chats = c0; if (typeof chatRender === 'function') try { chatRender(); } catch (e) { } } } catch (e) { }
+const chatSave = () => { try { const o = {}; for (const [k, v] of Object.entries(chats)) o[k] = (v || []).filter(m => !m.action && m.text !== 'Thinking…').slice(-40); localStorage.setItem('ccL_chats', JSON.stringify(o)); } catch (e) { } };
+if (typeof window !== 'undefined') { setInterval(chatSave, 30000); window.addEventListener('pagehide', chatSave); }

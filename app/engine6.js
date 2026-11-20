@@ -22,6 +22,34 @@ class LiveRunner {
     if (mine.length) return mine; const act = list.filter(c => c.activeContract); if (act.length) return act;
     return list.filter(c => String(c.name || '').toUpperCase().startsWith(up));   // none flagged active: let the user choose, with the names visible
   }
+  // ---- memory across restarts: the bot's trades, logs and the day's account numbers ----
+  saveHist() {
+    if (!this.sim || !this.broker) return; const S = this.sim, B = this.broker;
+    try { this.o.store.set('hist_' + this.sym, JSON.stringify({ trades: S.ex.trades.slice(-500), paper: S.paperTrades.slice(-500), log: B.log.slice(0, 300), decisions: S.decisions.slice(0, 300), dropped: S.dropped || [], slips: B.slips.slice(-200) })); } catch (e) { }
+    try { const R = S.rules; this.o.store.set('acct_' + this.account.id, JSON.stringify({ day: ctInfo(this.o.now()).day, dayStartBal: S.dayStartBal, peak: R.peak })); } catch (e) { }
+    this.lastSave = this.o.now();
+  }
+  loadHist() {
+    const S = this.sim, B = this.broker, R = S.rules, c = S.c, b = S.bars, today = ctInfo(this.o.now()).day;
+    const idx = t => { let lo = 0, hi = b.length - 1; if (!(t >= b[0].t)) return 0; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (b[m].t <= t) lo = m; else hi = m - 1; } return lo; };
+    try {
+      const a = JSON.parse(this.o.store.get('acct_' + this.account.id) || 'null');
+      if (a) {
+        if (a.day === today && isFinite(a.dayStartBal)) S.dayStartBal = a.dayStartBal;   // keep the day's starting balance, so the daily stop is not reset by a restart
+        if (isFinite(a.peak) && a.peak > R.peak) { R.peak = a.peak; R.floor = Math.min(c.start, a.peak - c.maxLoss); }   // keep the highest balance seen, so the trailing loss limit is not loosened
+        S.applyFloor(); S.syncBalance(S.lastBal);
+      }
+    } catch (e) { }
+    try {
+      const h = JSON.parse(this.o.store.get('hist_' + this.sym) || 'null'); if (!h) return;
+      const fix = t => Object.assign({}, t, { openI: idx(t.openT || t.t), closeI: idx(t.t) });
+      S.ex.trades = (h.trades || []).map(fix).concat(S.ex.trades); S.paperTrades = (h.paper || []).map(fix).concat(S.paperTrades);
+      S.decisions = S.decisions.concat((h.decisions || []).map(x => Object.assign({}, x, { i: idx(x.t) }))).slice(0, 400);
+      B.log = B.log.concat(h.log || []).slice(0, 300); B.slips = (h.slips || []).concat(B.slips); S.dropped = h.dropped || S.dropped;
+      const mine = S.ex.trades.filter(t => ctInfo(t.t).day === today); R.nToday = Math.max(R.nToday, mine.length);   // today's trade count survives a restart
+      for (const t of S.ex.trades) R.tradedDays.add(ctInfo(t.t).day);
+    } catch (e) { }
+  }
   loadStored(cid) { try { const raw = this.o.store.get('bars_' + cid); return raw ? JSON.parse(raw).map(a => ({ t: a[0], o: a[1], h: a[2], l: a[3], c: a[4] })) : []; } catch (e) { return []; } }
   saveStored(cid, bars) { try { this.o.store.set('bars_' + cid, JSON.stringify(bars.slice(-this.o.storeCap).map(b => [b.t, b.o, b.h, b.l, b.c]))); } catch (e) { /* storage full: keep running */ } }
   async start(accountId, contract, symbol) {
@@ -39,7 +67,7 @@ class LiveRunner {
     if (!Array.isArray(cfg.strategies)) cfg.strategies = [];     // live: trade only what the Backtester approves
     this.sim = new LiveSim(bars, cfg); this.broker = new Broker(this.api, this.sim, { mode: 'watch', accountId, contract, tf: o.tf, now: o.now });
     this.sim.initAccount(this.account.balance); this.learner = new Lab(this.sim); this.sim.lab = this.learner; { const st = this.o.store, k = 'probation_' + symbol, old = 'probation_' + contract.id; try { if (!st.get(k) && st.get(old)) st.set(k, st.get(old)); } catch (e) { } }   // keyed by market, so it survives the quarterly contract roll
-    this.probation = new Probation(this.sim, this.o.store, 'probation_' + symbol); this.sym = symbol; this.markets = new MarketWatch(this, this.o.scanList); if (this.probation.promoted.length) this.sim.setStrategies(this.probation.promoted.slice()); this.sim.onStrategies = l => this.onLearned && this.onLearned({ strategies: l }); this.status = 'running'; this.lastBars = this.lastMgr = this.lastBal = now;
+    this.probation = new Probation(this.sim, this.o.store, 'probation_' + symbol); this.sym = symbol; this.markets = new MarketWatch(this, this.o.scanList); this.loadHist(); this.lastSave = this.o.now(); this.broker.onTradeClosed = () => this.saveHist(); if (this.probation.promoted.length) this.sim.setStrategies(this.probation.promoted.slice()); this.sim.onStrategies = l => this.onLearned && this.onLearned({ strategies: l }); this.status = 'running'; this.lastBars = this.lastMgr = this.lastBal = now;
     this.sim.note(this.sim.i - 1, 'scanner', 'info', `Live data loaded: ${bars.length} candles (${stored ? 'stored history plus new' : 'fresh download'}). Contract ${contract.name}, tick ${contract.tickSize}, $${(contract.tickValue / contract.tickSize).toFixed(2)} per point.`, true);
     return this.sim;
   }
@@ -63,6 +91,7 @@ class LiveRunner {
       if (now - this.lastBal >= o.balEvery) { this.lastBal = now; await this.guard(() => this.pollBalance()); }
       if ((this.broker.state || this.broker.unmanaged) && now - (this.lastPx || 0) >= 10000) { this.lastPx = now; try { const nb = await this.api.bars(this.contract.id, now - 15 * 60000, now, 1, o.live, 3, true); if (nb.length) { this.livePrice = nb[nb.length - 1].c; this.livePriceAt = now; } } catch (e) { } }
       if (now - this.lastMgr >= o.mgrEvery) { this.lastMgr = now; await this.broker.manage(this.livePrice != null && now - this.livePriceAt < 60000 ? this.livePrice : last.c); }
+      if (now - (this.lastSave || 0) >= 60000) this.saveHist();
       if (this.markets && this.o.scanMarkets !== false) { try { this.markets.tick(now); } catch (e) { } }
       this.sim.audit(now, this.dataAgeSec(), { balAgeSec: this.lastBalOkAt ? (now - this.lastBalOkAt) / 1000 : null });
       this.lastError = null;

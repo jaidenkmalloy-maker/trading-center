@@ -103,6 +103,14 @@ async function getGex(force) {
 }
 function gexHistory() { const out = {}; try { for (const f of fs.readdirSync(GDIR)) if (/^\d{4}-\d{2}-\d{2}\.json$/.test(f)) out[f.slice(0, 10)] = readJson(path.join(GDIR, f), null); } catch (e) { } return out; }
 
+// ---- saved data on disk (a copy of everything the dashboard saves, so clearing the browser loses nothing) ----
+const KDIR = path.join(DIR, 'data', 'saved');
+const kfile = k => path.join(KDIR, Buffer.from(String(k)).toString('hex') + '.txt');
+function kvAll() { const out = {}; try { for (const f of fs.readdirSync(KDIR)) if (/^[0-9a-f]+\.txt$/.test(f)) { try { out[Buffer.from(f.slice(0, -4), 'hex').toString()] = fs.readFileSync(path.join(KDIR, f), 'utf8'); } catch (e) { } } } catch (e) { } return out; }
+function kvSet(k, v) { fs.mkdirSync(KDIR, { recursive: true }); const f = kfile(k); fs.writeFileSync(f + '.tmp', v); fs.renameSync(f + '.tmp', f); }
+function kvDel(k) { try { fs.unlinkSync(kfile(k)); } catch (e) { } }
+const localOrigin = req => !req.headers.origin || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(req.headers.origin);
+
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const send = (res, code, body, type) => { res.writeHead(code, { 'content-type': type || 'application/json', 'cache-control': 'no-store' }); res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
 const readBody = (req, max) => new Promise((ok, bad) => { const c = []; let n = 0; req.on('data', d => { n += d.length; if (n > (max || 2e6)) { bad(new Error('too big')); req.destroy(); } else c.push(d); }); req.on('end', () => ok(Buffer.concat(c))); req.on('error', bad); });
@@ -127,6 +135,13 @@ const server = http.createServer(async (req, res) => {
       try { const lv = processGex(JSON.parse((await readBody(req, 300e6)).toString('utf8')), 'browser'); return send(res, 200, { ok: true, levels: lv }); } catch (e) { return send(res, 200, { ok: false, error: e.message }); }
     }
     if (u.pathname === '/app/gex/history') return send(res, 200, { days: gexHistory() });
+    if (u.pathname === '/app/kv-all' && req.method === 'GET') return send(res, 200, kvAll());
+    if (u.pathname === '/app/kv' && (req.method === 'POST' || req.method === 'DELETE')) {
+      if (!localOrigin(req)) return send(res, 403, { error: 'wrong origin' }); const k = u.searchParams.get('key') || '';
+      if (!k || k.length > 200) return send(res, 400, { error: 'bad key' });
+      if (req.method === 'DELETE') { kvDel(k); return send(res, 200, { ok: true }); }
+      kvSet(k, (await readBody(req, 60e6)).toString('utf8')); return send(res, 200, { ok: true });
+    }
     if (u.pathname === '/app/status') return send(res, 200, { version: current.version, update: { state: upd.state, msg: upd.msg, version: upd.available && upd.available.version, notes: upd.available && upd.available.notes } });
     if (u.pathname === '/app/check' && req.method === 'POST') { await checkUpdate(); return send(res, 200, { state: upd.state, msg: upd.msg }); }
     if (u.pathname === '/app/install' && req.method === 'POST') { try { return send(res, 200, Object.assign({ ok: true }, await applyUpdate())); } catch (e) { upd.msg = e.message; return send(res, 200, { ok: false, msg: e.message }); } }
