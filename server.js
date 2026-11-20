@@ -81,10 +81,11 @@ function curlJson(url) {   // second route: the operating system's own curl (a d
 }
 function processGex(json, via) {
   const lv = GEX.computeGex(json, Date.now()), now = Date.now(), ct = GEX.ctNow(now);
+  if (lv.callWall == null && lv.putWall == null || !lv.ivAtm) throw new Error('Cboe sent the option list without its figures (this happens around the open); keeping the last good reading');
   lv.fetchedAt = now; lv.day = ct.day; lv.via = via; gx.last = lv; gx.at = now; gx.err = null; gx.via = via;
   fs.mkdirSync(GDIR, { recursive: true }); fs.writeFileSync(path.join(GDIR, 'latest.json'), JSON.stringify(lv));
   const f = path.join(GDIR, ct.day + '.json'), weekday = !['Sat', 'Sun'].includes(ct.dow) || ct.mins >= 1020;
-  const stale = fs.existsSync(f) && (readJson(f, {}).method || 1) < 2;   // a reading made with the older wall method is replaced
+  const old = fs.existsSync(f) ? readJson(f, {}) : null, stale = !!old && ((old.method || 1) < 2 || (old.callWall == null && old.putWall == null));   // a reading made with the older wall method is replaced
   if ((weekday && ct.mins >= 480 && ct.mins < 900 || process.env.TCC_GEX_ANYTIME) && (!fs.existsSync(f) || stale)) { fs.writeFileSync(f, JSON.stringify(lv)); log("Saved today's GEX levels (" + ct.day + ').'); }
   return lv;
 }
