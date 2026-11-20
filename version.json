@@ -1,6 +1,6 @@
 {
-  "version": "1.11.0",
-  "notes": "Stop and target can now be held at Topstep as a linked pair (one filling cancels the other), so a trade stays protected even if this computer goes offline. Needs Auto OCO Brackets switched on in TopstepX. The GEX panel shows which way it is set.",
+  "version": "1.12.0",
+  "notes": "GEX levels now refresh every 30 minutes during the trading day (walls and flip follow the options market; the IV range stays at the morning's). A weekly report is texted every Friday after the close, with a button to send it any time.",
   "files": {
     "app/index.html": "54a3d4fbde7d155839c256c6f1ab11231f649d869c06c9bb64b484aaa549e1c8",
     "app/style.css": "dca9c75114fca0a08d05e064c5f3437a90272800da463a6227917fe7dccd733f",
@@ -9,15 +9,15 @@
     "app/engine2.js": "296c05b46bf0f99fa5778676e4a7607321a234a01394458d6e75b13adc03c3c0",
     "app/engine3.js": "15b839f55ff9a0c7933ee16977690513fe0925d9df4daca7f89f5a9fb6e6233e",
     "app/engine4.js": "8407e4c56d4bb0df0a01d0f33aecd42b7c05608ff367af2ad1679a1d761b742b",
-    "app/engine5.js": "3c4133d9b3605df585f6dfbce9794be1d1f5eeb7a4ef4e0a3e22de5f97d6bb88",
-    "app/engine6.js": "203893eaabbaff730d98be305d5ed972a44027bd5a3264e64c8fa160109a0261",
+    "app/engine5.js": "dbcd51c2e7d2ecc89e85d610a536e29bce13fed91b6d72c67ffc8ea482553801",
+    "app/engine6.js": "79bb1b0d23ea799d7df26df0d70c2468557ac32f713cd07bde76969b167e049b",
     "app/engine7.js": "fe5419955d9af2e89014f797dfa049d14dfbc2fa6fc7ab9499d21fd3035fe76b",
     "app/engine8.js": "2a11497c12ca84d5188b68b43cd26b49c8058145b4414d02e75f4f231dfd4a5f",
     "app/ui1.js": "750aa8fc5991050aab8ff9b98397c9d655be539cc8ddd15157a2309d20e0251c",
     "app/ui2.js": "31689fb9c079b6bc8ee2282e4b3a787304f19bb22e1489fdcb5ab7113b8f49d8",
     "app/ui3.js": "38156398192f5e39a362d69d879ed06c2f45cd54989c1cd1fb1d7b965a9eaad1",
-    "app/ui4.js": "331b63f5f043bd1f2c7dec6b71bc19efaf10a8ccf16d34df504eb1f96197cfca",
-    "server.js": "a3ddbdd16a73852ae75f018b10dd1afd10871f192293141b3b7cbcaa893b75b2",
+    "app/ui4.js": "d783114ea4ce5f45c33fb8967ddffd396022cfa4907f59ec6aeabbd0613b6f6c",
+    "server.js": "bfab107092dc82b1460dcfac33062a0fdf6bb9c223c6869bcc02e07b3672874d",
     "gex.js": "994ab5a2aecf75ce9cfd5b77ea69b3ee42a94933ae7550c4e4504349cad8c6ab"
   }
 }

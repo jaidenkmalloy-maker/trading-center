@@ -14,6 +14,7 @@ async function kpSend(title, msg, prio, force) {
 }
 function kpFromBroker(kind, msg, ok) { const r = KP_RULE[kind]; if (r) kpSend(r[1], msg, r[0]); }
 function kpFromNote(sys, kind, msg) { if ((sys === 'rules' && kind === 'halt') || (sys === 'performance' && kind === 'pause')) kpSend(sys === 'rules' ? 'Rules Manager' : 'Performance Manager', msg, 4); }
+function kpSendEod(t) { kpSend('End of day', t, 3, false); }
 function kpWatch() {   // once per tick: connection trouble and the end-of-day report
   const r = runner; if (!r || !sim || runner.sim !== sim) return;
   try { const L = r.learner; if (L && L.lastRunAt !== KP.labShown) { KP.labShown = L.lastRunAt; labRender(); } } catch (e) { }
@@ -27,7 +28,16 @@ function kpWatch() {   // once per tick: connection trouble and the end-of-day r
   if (r.lastError) { if (!KP.errSince) KP.errSince = Date.now(); if (Date.now() - KP.errSince > 60000) kpSend('Problem', 'Connection trouble for over a minute: ' + r.lastError, 4); } else KP.errSince = null;
   const now = new Date(), ct = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' })), day = ct.toDateString(), mins = ct.getHours() * 60 + ct.getMinutes(), R = sim.rules;
   if (KP.day !== day) { KP.day = day; KP.dayStart = R.closed || 0; }
-  if (mins >= hm(sim.c.flatTime) + 5 && KP.sentSummary !== day && ct.getDay() > 0 && ct.getDay() < 6) { KP.sentSummary = day; const d = (R.closed || 0) - KP.dayStart; kpSend('End of day', `Day P&L ${usd(d)}. Account is ${usd(R.closed || 0)} from the start. Systems are ${runner.broker.o.mode === 'watch' ? 'in watch mode' : 'running'}.`, 3, false); }
+  try { kpWeekly(false); } catch (e) { }
+  if (mins >= hm(sim.c.flatTime) + 5 && KP.sentSummary !== day && ct.getDay() > 0 && ct.getDay() < 6) { KP.sentSummary = day; const d = (R.closed || 0) - KP.dayStart; kpSendEod(`Day P&L ${usd(d)}. Account is ${usd(R.closed || 0)} from the start. Systems are ${runner.broker.o.mode === 'watch' ? 'in watch mode' : 'running'}.`, 3, false); }
+}
+function kpWeekly(force) {
+  const r = runner; if (!r || !r.weeklyReport) return null;
+  const now = Date.now(), ci = ctInfo(now), friAfter = ci.dow === 'Fri' && ci.mins >= hm(sim.c.flatTime) + 10, wkend = ci.dow === 'Sat' || (ci.dow === 'Sun' && ci.mins < 1020);
+  const rep = r.weeklyReport(now, LV.byDay); let sent = ''; try { sent = localStorage.getItem('ccL_weekSent') || ''; } catch (e) { }
+  if (!force && (!(friAfter || wkend) || sent === rep.key || !KP.topic || !KP.on)) return rep;
+  if (!force) { try { localStorage.setItem('ccL_weekSent', rep.key); } catch (e) { } }
+  kpSend(rep.title, rep.text, 3, !!force); return rep;
 }
 async function kpWake() { try { if (navigator.wakeLock && document.visibilityState === 'visible') KP.wake = await navigator.wakeLock.request('screen'); } catch (e) { KP.wake = null; } }
 document.addEventListener('visibilitychange', () => { if (runner && document.visibilityState === 'visible') kpWake(); });
@@ -45,13 +55,14 @@ function kpRender() {
   const el = document.getElementById('kpBody'); if (!el) return; const act = document.activeElement && document.activeElement.id === 'kpTopic';
   if (act) { const s = document.getElementById('kpStatus'); if (s) s.textContent = KP.lastRes; return; }
   el.innerHTML = `<div class="form"><label>Your private alert name<input id="kpTopic" value="${esc(KP.topic)}" onchange="kpSet(this.value)" placeholder="press Make one for me"></label></div>
-  <div class="row" style="margin:8px 0"><button class="small" onclick="kpMake()">Make one for me</button><button class="small" onclick="kpTest()">Send a test alert</button><label class="row" style="gap:5px"><input type="checkbox" ${KP.on ? 'checked' : ''} onchange="kpToggle(this.checked)"> Send alerts to my phone</label></div>
+  <div class="row" style="margin:8px 0"><button class="small" onclick="kpMake()">Make one for me</button><button class="small" onclick="kpTest()">Send a test alert</button><button class="small" id="kpWeekBtn" onclick="kpWeekNow()">Send this week's report</button><label class="row" style="gap:5px"><input type="checkbox" ${KP.on ? 'checked' : ''} onchange="kpToggle(this.checked)"> Send alerts to my phone</label></div>
   <div id="kpStatus" class="note">${esc(KP.lastRes)}</div>
-  <div class="note"><b>One-time phone setup:</b> install the free <b>ntfy</b> app (App Store or Google Play), tap +, type exactly the alert name above, and subscribe. Then press "Send a test alert". Anyone who knows the name can read the alerts, so keep it private. You get alerts for: trades opening and closing, a trade waiting for your OK, problems, loss-limit and pause events, and a short end-of-day report.</div>`;
+  <div class="note"><b>One-time phone setup:</b> install the free <b>ntfy</b> app (App Store or Google Play), tap +, type exactly the alert name above, and subscribe. Then press "Send a test alert". Anyone who knows the name can read the alerts, so keep it private. You get alerts for: trades opening and closing, a trade waiting for your OK, problems, loss-limit and pause events, a weekly report every Friday after the close, and a short end-of-day report.</div>`;
 }
 function kpSet(v) { KP.topic = v.trim(); kpSave(); }
 function kpMake() { KP.topic = kpRandTopic(); KP.on = true; kpSave(); KP.lastRes = 'Name made. Subscribe to it in the ntfy app, then send a test.'; kpRender(); }
 function kpToggle(on) { KP.on = on; kpSave(); }
+function kpWeekNow() { if (!KP.topic) { KP.lastRes = 'Press "Make one for me" first.'; kpRender(); return; } if (!runner || !runner.weeklyReport) { KP.lastRes = 'Connect first, then the report can be built.'; kpRender(); return; } kpWeekly(true); }
 async function kpTest() { if (!KP.topic) { KP.lastRes = 'Press "Make one for me" first.'; kpRender(); return; } const ok = await kpSend('Test', 'Hello from your trading control center. If you can read this on your phone, alerts work.', 3, true); if (!ok) kpRender(); }
 
 // ---- Levels: the daily GEX / IV-wall numbers you copy from TradingView ----
@@ -123,7 +134,9 @@ function gxApply(day, s) {
   const raw = {}, lv = [];
   for (const [k, f] of [['call', 'callWall'], ['put', 'putWall'], ['flip', 'flip'], ['ivHi', 'ivHi'], ['ivLo', 'ivLo']]) if (s[f] > 0) { raw[k] = s[f]; lv.push({ k, p: Math.round((s[f] + off) * 4) / 4 }); }
   if (!lv.length) return false;
-  LV.byDay[day] = { auto: true, off, raw, lv, spot: s.spot, regime: s.regime }; return true;
+  const prev = LV.byDay[day], nx = { auto: true, off, raw, lv, spot: s.spot, regime: s.regime, upd: s.updatedAt || s.fetchedAt || null, n: s.updates || 0 };
+  if (prev && JSON.stringify(prev.lv) === JSON.stringify(nx.lv) && prev.regime === nx.regime && prev.upd === nx.upd) return false;
+  LV.byDay[day] = nx; return true;
 }
 async function gxSync(force) {
   if (!IS_APP || GX.busy) return; GX.busy = true;
@@ -137,7 +150,7 @@ async function gxSync(force) {
     }
     GX.last = now.levels; GX.err = now.fresh ? null : now.error; GX.today = now.today;
     const hist = (await (await fetch('/app/gex/history', { cache: 'no-store' })).json()).days || {}; let changed = false;
-    for (const [day, s] of Object.entries(hist)) if (gxApply(day, s)) changed = true;
+    for (const [day, s] of Object.entries(hist)) if (gxApply(day, day === GX.today || !s.first ? s : s.first)) changed = true;
     if (changed) { lvSaveStore(); if (sim && sim.c) sim.c.levelsByDay = LV.byDay; }
     GX.syncedAt = Date.now(); lvRenderLevels(true);
   } catch (e) { GX.err = 'The app program did not answer: ' + e.message; }
@@ -309,7 +322,7 @@ async function exportLong() {
 // ---- GEX mode panel ----
 function gexModeHtml() {
   const r = runner, on = !!(r && r.sim && r.sim.gexOnly), day = lvToday(), L = LV.byDay[day], R = r && r.sim ? r.sim.rules : null, mode = r && r.broker ? r.broker.o.mode : 'watch';
-  const lv = L && L.lv ? L.lv.map(x => ({ call: 'Call wall', put: 'Put wall', flip: 'Flip', ivHi: 'IV high', ivLo: 'IV low' }[x.k] + ' ' + x.p)).join(' · ') : 'no levels yet for today';
+  const lv = L && L.lv ? L.lv.map(x => ({ call: 'Call wall', put: 'Put wall', flip: 'Flip', ivHi: 'IV high', ivLo: 'IV low' }[x.k] + ' ' + x.p)).join(' · ') + (L.upd ? ' · updated ' + new Date(L.upd).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' }) + ' CT' + (L.n ? ' (refreshes every 30 min)' : '') : '') : 'no levels yet for today';
   const reg = L && L.regime ? L.regime : (L ? 'unknown' : 'waiting for today\'s reading'), trading = !(L && L.regime === 'negative');
   let h = `<div class="row"><button class="${on ? '' : 'primary'}" onclick="gexToggle()">${on ? 'Turn GEX mode off' : 'Turn GEX mode on'}</button><span class="pill ${on ? 'ok' : ''}">${on ? 'ON' : 'OFF'}</span></div>`;
   h += `<div class="gmrow"><div><span class="mut">Today's gamma</span><b class="${/^positive/.test(reg) ? 'pos' : /^negative/.test(reg) ? 'neg' : ''}">${esc(reg)}</b></div><div><span class="mut">Trades today</span><b>${R ? R.nToday : 0} of ${on ? 2 : (r && r.sim ? r.sim.c.maxTradesPerDay : '-')}</b></div><div><span class="mut">Size</span><b>${on ? '1 contract' : '-'}</b></div><div><span class="mut">Orders go to Topstep</span><b class="${mode === 'auto' || mode === 'confirm' ? 'pos' : 'neg'}">${mode === 'auto' ? 'yes, automatically' : mode === 'confirm' ? 'after you approve' : 'no (' + esc(MODE_TXT[mode] || mode) + ')'}</b></div></div>`;

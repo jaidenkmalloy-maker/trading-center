@@ -64,6 +64,7 @@ async function applyUpdate() {
 
 // ---- free GEX levels ----
 const gx = { last: null, at: 0, err: null, busy: null, via: null };
+const REFRESH_MS = +(process.env.TCC_GEX_REFRESH_MS || 25 * 60000);   // how often today's levels follow the options market
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 const CB_HEADERS = { 'user-agent': UA, accept: 'application/json, text/plain, */*', 'accept-language': 'en-US,en;q=0.9', referer: 'https://www.cboe.com/', origin: 'https://www.cboe.com' };
 function curlJson(url) {   // second route: the operating system's own curl (a different network fingerprint than Node)
@@ -87,6 +88,12 @@ function processGex(json, via) {
   const f = path.join(GDIR, ct.day + '.json'), weekday = !['Sat', 'Sun'].includes(ct.dow) || ct.mins >= 1020;
   const old = fs.existsSync(f) ? readJson(f, {}) : null, stale = !!old && ((old.method || 1) < 2 || (old.callWall == null && old.putWall == null));   // a reading made with the older wall method is replaced
   if ((weekday && ct.mins >= 480 && ct.mins < 900 || process.env.TCC_GEX_ANYTIME) && (!fs.existsSync(f) || stale)) { fs.writeFileSync(f, JSON.stringify(lv)); log("Saved today's GEX levels (" + ct.day + ').'); }
+  else if (old && !stale && (weekday && ct.mins >= 510 && ct.mins < 900 || process.env.TCC_GEX_ANYTIME) && now - (old.updatedAt || old.fetchedAt || 0) >= REFRESH_MS) {
+    // during the trading day: walls and flip follow the options market; the IV range stays anchored to the morning (it is the day's expected move)
+    const first = old.first || { callWall: old.callWall, putWall: old.putWall, flip: old.flip, ivHi: old.ivHi, ivLo: old.ivLo, ivAtm: old.ivAtm, regime: old.regime, spot: old.spot, fetchedAt: old.fetchedAt, method: old.method };
+    const up = Object.assign({}, lv, { ivHi: first.ivHi, ivLo: first.ivLo, first, updates: (old.updates || 0) + 1, updatedAt: now, snaps: (old.snaps || []).concat([[now, lv.callWall, lv.putWall, lv.flip, lv.regime, lv.spot]]).slice(-40) });
+    fs.writeFileSync(f, JSON.stringify(up)); log('Updated today\'s GEX levels: call wall ' + lv.callWall + ', put wall ' + lv.putWall + ', flip ' + lv.flip + ', ' + lv.regime + ' gamma.');
+  }
   return lv;
 }
 async function getGex(force) {

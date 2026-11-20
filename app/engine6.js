@@ -25,9 +25,41 @@ class LiveRunner {
   // ---- memory across restarts: the bot's trades, logs and the day's account numbers ----
   saveHist() {
     if (!this.sim || !this.broker) return; const S = this.sim, B = this.broker;
-    try { this.o.store.set('hist_' + this.sym, JSON.stringify({ trades: S.ex.trades.slice(-500), paper: S.paperTrades.slice(-500), log: B.log.slice(0, 300), decisions: S.decisions.slice(0, 300), dropped: S.dropped || [], slips: B.slips.slice(-200) })); } catch (e) { }
+    try { this.o.store.set('hist_' + this.sym, JSON.stringify({ trades: S.ex.trades.slice(-500), paper: S.paperTrades.slice(-500), log: B.log.slice(0, 300), decisions: S.decisions.slice(0, 300), dropped: S.dropped || [], slips: B.slips.slice(-200), setups: (this.setups || []).slice(-300) })); } catch (e) { }
     try { const R = S.rules; this.o.store.set('acct_' + this.account.id, JSON.stringify({ day: ctInfo(this.o.now()).day, dayStartBal: S.dayStartBal, peak: R.peak })); } catch (e) { }
     this.lastSave = this.o.now();
+  }
+  hookSetups() {   // every live setup the scanner finds, and what happened to it (for the weekly report)
+    const S = this.sim, hs = S.handleSignal.bind(S);
+    S.handleSignal = (i, bar, sig) => { const n = S.sigs.length, out = hs(i, bar, sig), rec = S.sigs[n];
+      if (rec) { this.setups.push({ t: bar.t, day: ctInfo(bar.t).day, dir: sig.dir, level: sig.level || sig.name || 'setup', decision: rec.decision, why: rec.why || '' }); if (this.setups.length > 300) this.setups.shift(); }
+      return out; };
+  }
+  weeklyReport(now, lvByDay) {   // plain-English summary of the trading week (Mon-Fri) that contains "now"; on a weekend, the week just finished
+    const ci = ctInfo(now), DOW = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 }, back = DOW[ci.dow] == null ? 0 : DOW[ci.dow];
+    const d0 = Date.UTC(+ci.date.slice(0, 4), +ci.date.slice(5, 7) - 1, +ci.date.slice(8, 10)) - back * 864e5, days = [];
+    for (let k = 0; k < 5; k++) days.push(new Date(d0 + k * 864e5).toISOString().slice(0, 10));
+    const inWk = d => days.includes(d), fmtD = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    const wd = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+    const LN = { call: 'call wall', put: 'put wall', flip: 'flip', ivHi: 'IV high', ivLo: 'IV low' }, lname = l => { if (!l) return 'other'; const m = String(l).match(/^(\w+)( break)?$/); return m && LN[m[1]] ? LN[m[1]] + (m[2] ? ' break' : ' bounce') : String(l); };
+    const S = this.sim, tr = (S ? S.ex.trades : []).filter(t => t.openT).map(t => Object.assign({}, t, { day: ctInfo(t.openT).day })).filter(t => inWk(t.day));
+    const pnl = tr.reduce((a, t) => a + t.pnl, 0), wins = tr.filter(t => t.pnl > 0).length, money = n => (n >= 0 ? '+' : '-') + '$' + Math.abs(n).toFixed(2);
+    const lines = [`Week of ${fmtD(days[0])} to ${fmtD(days[4])}`];
+    if (!tr.length) lines.push('No trades this week.');
+    else {
+      lines.push(`${tr.length} trade${tr.length > 1 ? 's' : ''}: ${wins} win${wins === 1 ? '' : 's'}, ${tr.length - wins} loss${tr.length - wins === 1 ? '' : 'es'}. Total ${money(pnl)}.`);
+      const best = tr.reduce((a, t) => t.pnl > a.pnl ? t : a), worst = tr.reduce((a, t) => t.pnl < a.pnl ? t : a);
+      lines.push(`Best ${money(best.pnl)} (${wd(best.day)}, ${lname(best.level)}).` + (tr.length > 1 ? ` Worst ${money(worst.pnl)} (${wd(worst.day)}, ${lname(worst.level)}).` : ''));
+      const by = {}; for (const t of tr) { const k = lname(t.level); by[k] = by[k] || { n: 0, p: 0 }; by[k].n++; by[k].p += t.pnl; }
+      lines.push('By level: ' + Object.entries(by).map(([k, v]) => `${k} ${v.n} (${money(v.p)})`).join(', ') + '.');
+    }
+    const su = (this.setups || []).filter(s => inWk(ctInfo(s.t).day)), skipped = su.filter(s => s.decision !== 'approved'), why = {};
+    for (const s of skipped) { const w = (s.why || s.decision).split(';')[0].trim(); why[w] = (why[w] || 0) + 1; }
+    lines.push(su.length ? `Setups found: ${su.length}. Not taken: ${skipped.length}${skipped.length ? ' (' + Object.entries(why).map(([k, v]) => k + (v > 1 ? ' x' + v : '')).join(', ') + ')' : ''}.` : 'Setups found: none.');
+    const L = lvByDay || {}, rec = days.filter(d => L[d] && L[d].lv && L[d].lv.length), pos = rec.filter(d => L[d].regime === 'positive').length, neg = rec.filter(d => L[d].regime === 'negative').length;
+    lines.push(`Gamma: ${pos} positive day${pos === 1 ? '' : 's'}, ${neg} negative. GEX levels saved for ${rec.length} of 5 days.`);
+    if (S && isFinite(S.lastBal)) lines.push(`Account balance about $${Math.round(S.lastBal).toLocaleString('en-US')}.`);
+    return { key: days[0], title: 'Weekly report', text: lines.join('\n') };
   }
   loadHist() {
     const S = this.sim, B = this.broker, R = S.rules, c = S.c, b = S.bars, today = ctInfo(this.o.now()).day;
@@ -45,7 +77,7 @@ class LiveRunner {
       const fix = t => Object.assign({}, t, { openI: idx(t.openT || t.t), closeI: idx(t.t) });
       S.ex.trades = (h.trades || []).map(fix).concat(S.ex.trades); S.paperTrades = (h.paper || []).map(fix).concat(S.paperTrades);
       S.decisions = S.decisions.concat((h.decisions || []).map(x => Object.assign({}, x, { i: idx(x.t) }))).slice(0, 400);
-      B.log = B.log.concat(h.log || []).slice(0, 300); B.slips = (h.slips || []).concat(B.slips); S.dropped = h.dropped || S.dropped;
+      this.setups = (h.setups || []).concat(this.setups || []).slice(-300); B.log = B.log.concat(h.log || []).slice(0, 300); B.slips = (h.slips || []).concat(B.slips); S.dropped = h.dropped || S.dropped;
       const mine = S.ex.trades.filter(t => ctInfo(t.t).day === today); R.nToday = Math.max(R.nToday, mine.length);   // today's trade count survives a restart
       for (const t of S.ex.trades) R.tradedDays.add(ctInfo(t.t).day);
     } catch (e) { }
@@ -67,7 +99,7 @@ class LiveRunner {
     if (!Array.isArray(cfg.strategies)) cfg.strategies = [];     // live: trade only what the Backtester approves
     this.sim = new LiveSim(bars, cfg); this.broker = new Broker(this.api, this.sim, { mode: 'watch', accountId, contract, tf: o.tf, now: o.now, store: o.store });
     this.sim.initAccount(this.account.balance); this.learner = new Lab(this.sim); this.sim.lab = this.learner; { const st = this.o.store, k = 'probation_' + symbol, old = 'probation_' + contract.id; try { if (!st.get(k) && st.get(old)) st.set(k, st.get(old)); } catch (e) { } }   // keyed by market, so it survives the quarterly contract roll
-    this.probation = new Probation(this.sim, this.o.store, 'probation_' + symbol); this.sym = symbol; this.markets = new MarketWatch(this, this.o.scanList); this.loadHist(); this.lastSave = this.o.now(); this.broker.onTradeClosed = () => this.saveHist(); if (this.gexOnlySaved()) this.setGexOnly(true); if (this.startStream) this.startStream(); if (this.probation.promoted.length) this.sim.setStrategies(this.probation.promoted.slice()); this.sim.onStrategies = l => this.onLearned && this.onLearned({ strategies: l }); this.status = 'running'; this.lastBars = this.lastMgr = this.lastBal = now;
+    this.probation = new Probation(this.sim, this.o.store, 'probation_' + symbol); this.sym = symbol; this.markets = new MarketWatch(this, this.o.scanList); this.setups = []; this.hookSetups(); this.loadHist(); this.lastSave = this.o.now(); this.broker.onTradeClosed = () => this.saveHist(); if (this.gexOnlySaved()) this.setGexOnly(true); if (this.startStream) this.startStream(); if (this.probation.promoted.length) this.sim.setStrategies(this.probation.promoted.slice()); this.sim.onStrategies = l => this.onLearned && this.onLearned({ strategies: l }); this.status = 'running'; this.lastBars = this.lastMgr = this.lastBal = now;
     this.sim.note(this.sim.i - 1, 'scanner', 'info', `Live data loaded: ${bars.length} candles (${stored ? 'stored history plus new' : 'fresh download'}). Contract ${contract.name}, tick ${contract.tickSize}, $${(contract.tickValue / contract.tickSize).toFixed(2)} per point.`, true);
     return this.sim;
   }

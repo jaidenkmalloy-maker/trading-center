@@ -256,7 +256,7 @@ class Broker {
       }
       this.slips.push(Math.abs(entry - t.planned) / c.tick);
       const bar = sim.bars[sim.bars.length - 1];
-      this.state = { strat: sig && sig.strat, stratName: sig && sig.name, dir, qty: size, entry, stop: t.stop, target: t.target, stopId: so.orderId, tpId: to.orderId, openedAt: o.now(), openI: sim.bars.length - 1, tag, missStop: 0, missTp: 0, planned: t.planned };
+      this.state = { strat: sig && sig.strat, stratName: sig && sig.name, dir, qty: size, entry, stop: t.stop, target: t.target, stopId: so.orderId, tpId: to.orderId, openedAt: o.now(), openI: sim.bars.length - 1, tag, missStop: 0, missTp: 0, planned: t.planned, level: sig && sig.level || null };
       sim.rules.nToday++; sim.rules.tradedDays.add(bar ? bar.day : '');
       this.state.linked = linked; this.say('fill', `Filled ${dir} ${size} @ ${entry} (planned ${t.planned}). Stop ${t.stop} and target ${t.target} are working${linked ? ' as a linked pair at Topstep (one cancels the other, even if this computer goes offline)' : ''}.`, true);
     } catch (e) { this.err('Order flow stopped: ' + e.message); }
@@ -336,7 +336,7 @@ class Broker {
       for (const id of [st.stopId, st.tpId]) if (id) await api.cancel(a, id).catch(() => {});
     } catch (e) { this.err('Could not confirm the exit price (' + e.message + '); using the last price.'); }
     const s = st.dir === 'long' ? 1 : -1, gross = (exit - st.entry) * s, pnl = gross * c.mult * st.qty - 2 * c.fee * st.qty, i = sim.bars.length - 1;
-    const tr = { strat: st.strat, openI: st.openI, closeI: i, t: bar ? bar.t : this.o.now(), openT: st.openedAt, side: st.dir === 'long' ? 'Buy' : 'Sell', qty: st.qty, entry: st.entry, exit, reason, pnl, r: gross / Math.max(Math.abs(st.entry - st.stop), c.tick), day: bar ? bar.day : '' };
+    const tr = { strat: st.strat, openI: st.openI, closeI: i, t: bar ? bar.t : this.o.now(), openT: st.openedAt, side: st.dir === 'long' ? 'Buy' : 'Sell', qty: st.qty, entry: st.entry, exit, reason, pnl, r: gross / Math.max(Math.abs(st.entry - st.stop), c.tick), day: bar ? bar.day : '', level: st.level || null, real: true };
     sim.ex.trades.push(tr); this.state = null; this.lastClose = this.o.now(); this.lastQty = tr.qty; sim.realOpen = 0; if (this.onTradeClosed) try { this.onTradeClosed(tr); } catch (e) { }
     sim.note(i, 'executor', 'exit', `REAL ${tr.side === 'Buy' ? 'Long' : 'Short'} ${tr.qty} closed (${reason}) @ ${exit}, about ${usd(pnl)}`, pnl >= 0);
     this.say('exit', `Position closed (${reason}) @ ${exit}, about ${usd(pnl)}. The balance from Topstep is the final word.`, pnl >= 0);
