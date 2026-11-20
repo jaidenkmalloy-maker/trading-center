@@ -83,7 +83,7 @@ function appRender() {
   v.style.display = ''; v.textContent = 'App v' + (APPST.version || '?'); const u = APPST.update || {};
   const pos = appHasPos();
   if (APPST.msg) b.innerHTML = `<div class="banner info">${esc(APPST.msg)}</div>`;
-  else if (u.state === 'available') b.innerHTML = `<div class="banner info"><b>Update ready:</b> ${esc(u.msg)} ${pos ? '<br>You have an open position. Install after it closes.' : ''} <button class="small primary" ${APPST.busy || pos ? 'disabled' : ''} onclick="appInstall()">Install update</button><br><span class="mut">Installing reloads the page, so you will need to reconnect (your settings, levels and alert name are kept).</span></div>`;
+  else if (u.state === 'available') b.innerHTML = `<div class="banner info"><b>Update ready:</b> ${esc(u.msg)} ${pos ? '<br>The bot has a trade open. Install after it closes.' : ''} <button class="small primary" ${APPST.busy || pos ? 'disabled' : ''} onclick="appInstall()">Install update</button><br><span class="mut">Installing reloads the page, so you will need to reconnect (your settings, levels and alert name are kept).</span></div>`;
   else if (u.state === 'error') b.innerHTML = `<div class="banner amber">${esc(u.msg)}</div>`;
   else b.innerHTML = '';
 }
@@ -95,7 +95,7 @@ async function appInstall() {
     if (!r.restart) setTimeout(() => location.reload(), 1500);
   } catch (e) { APPST.busy = false; APPST.msg = 'Update failed: ' + e.message; appRender(); }
 }
-function appHasPos() { const B = typeof runner !== 'undefined' && runner && runner.broker; return !!(B && (B.state || (B.realPos || []).length)); }
+function appHasPos() { const B = typeof runner !== 'undefined' && runner && runner.broker; return !!(B && B.state); }   // only the bot's own trades block an update; yours are not touched by it
 function confirmFlat() { const pos = appHasPos(); return !pos; }
 if (IS_APP) {
   const gw = document.getElementById('lvBase'); if (gw) gw.value = location.origin + '/tsx';

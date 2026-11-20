@@ -37,8 +37,8 @@ class TopstepAPI {
   }
   async accounts() { return (await this.call('/api/Account/search', { onlyActiveAccounts: true })).accounts || []; }
   async contracts(text, live) { return (await this.call('/api/Contract/search', { searchText: text, live: !!live })).contracts || []; }
-  async bars(contractId, fromMs, toMs, tf, live, limit) {
-    const j = await this.call('/api/History/retrieveBars', { contractId, live: !!live, startTime: new Date(fromMs).toISOString(), endTime: new Date(toMs).toISOString(), unit: 2, unitNumber: tf, limit: limit || 20000, includePartialBar: false });
+  async bars(contractId, fromMs, toMs, tf, live, limit, partial) {
+    const j = await this.call('/api/History/retrieveBars', { contractId, live: !!live, startTime: new Date(fromMs).toISOString(), endTime: new Date(toMs).toISOString(), unit: 2, unitNumber: tf, limit: limit || 20000, includePartialBar: !!partial });
     const out = (j.bars || []).map(b => ({ t: Date.parse(b.t), o: +b.o, h: +b.h, l: +b.l, c: +b.c, v: +b.v || 0 })).filter(b => isFinite(b.t) && [b.o, b.h, b.l, b.c].every(isFinite));
     out.sort((a, b) => a.t - b.t); return out.filter((b, i) => i === 0 || b.t !== out[i - 1].t);
   }
@@ -130,9 +130,9 @@ class LiveSim extends Sim {
     const c = this.c, x = (l, d, ok, crit) => ({ l, d, ok, crit: !!crit }), SN = { scanner: 'Scanner', backtester: 'Backtester', executor: 'Executor', rules: 'Rules Manager' }, now = B.o.now();
     const list = c.strategies || [], lr = this.lab && this.lab.lastRun, ex = h.sys.find(s => s.id === 'executor'), st = B.state, sc = h.sys.find(s => s.id === 'scanner'), bt = h.sys.find(s => s.id === 'backtester'), pf = h.sys.find(s => s.id === 'performance');
     ex.role = 'Places REAL orders on your Topstep account'; ex.name = '3 · Executor (' + MODE_TXT[B.o.mode] + ')';
-    ex.m = [['Mode', MODE_TXT[B.o.mode]], ['Real trades', this.ex.trades.length], ['Position', st ? `${st.dir} ${st.qty}` : (B.unmanaged ? 'UNMANAGED' : 'flat')]];
+    ex.m = [['Mode', MODE_TXT[B.o.mode]], ['Real trades', this.ex.trades.length], ['Position', st ? `${st.dir} ${st.qty}` : (B.unmanaged ? 'yours: ' + B.unmanaged.size : 'flat')]];
     ex.e = [x('Open trade has its stop and target on the exchange', st ? (st.stopId && st.tpId ? 'both working' : 'MISSING') : 'no trade', st ? !!(st.stopId && st.tpId) : null, true),
-            x('No position the bot did not open', B.unmanaged ? 'found one: check TopstepX' : 'none', !B.unmanaged, true),
+            x('Your own trades are left alone', B.unmanaged ? 'you have one open (' + B.unmanaged.size + ')' : 'none open', true),
             x('Order calls succeeding', B.errors.length ? B.errors[0].msg.slice(0, 60) : 'no errors', B.errors.length === 0),
             x('Flat by ' + c.flatTime + ' CT', st ? 'holding' : 'flat', !(st && inFlat(ctInfo(now).mins, c)), true)];
     sc.role = 'Scans live candles for setups from the approved strategies'; const live = this.scan.leg;
@@ -198,7 +198,7 @@ class Broker {
       if (!(t.qty >= 1) || t.qty > c.maxContracts) { this.say('skip', 'Order not sent: size ' + t.qty + ' is outside 1 to ' + c.maxContracts + '.', false); return; }
       if (long ? !(t.stop < t.planned && t.target > t.planned) : !(t.stop > t.planned && t.target < t.planned)) { this.say('skip', 'Order not sent: stop and target are on the wrong sides of the entry.', false); return; }
       const ps = (await api.positions(a)).filter(p => p.size > 0), os = (await api.openOrders(a)).filter(x => x.contractId === cid);
-      if (ps.length || os.length) { this.alert('Order not sent: the account already has a position or working order on this contract. Resolve it in TopstepX.'); return; }
+      if (ps.length || os.length) { if (this.unmanaged || ps.length) { this.say('skip', 'Setup approved, but you have your own trade open on this contract, so the bot stayed out.', null); return; } this.alert('Order not sent: the account has a working order on this contract that the bot did not place. Check TopstepX.'); return; }
       const tag = 'cc' + o.now(), P = this.payloads(t); P.entry.customTag = tag + 'E'; P.stop.customTag = tag + 'S'; P.target.customTag = tag + 'T';
       const er = await api.place(P.entry); this.ourIds.add(er.orderId); this.say('order', `Entry sent: ${t.side} ${t.qty} at market (order ${er.orderId}).`, true);
       let pos = null;
@@ -223,7 +223,8 @@ class Broker {
     } catch (e) { this.err('Order flow stopped: ' + e.message); }
     finally { this.executing = false; }
   }
-  requestFlatten(why) { if (this.state || this.unmanaged) this.flatReq = why; if (this.pending) { this.pending = null; this.say('skip', 'Pending order cancelled: ' + why, null); } }
+  requestFlatten(why) { if (this.state || (this.unmanaged && /you pressed/.test(why))) this.flatReq = why;   // your own trades are only closed when you press Flatten
+    if (this.pending) { this.pending = null; this.say('skip', 'Pending order cancelled: ' + why, null); } }
   async flatten(why, emergency) {
     const api = this.api, a = this.o.accountId, cid = this.o.contract.id; this.say('flatten', 'Flattening: ' + why, false);
     if (this.state) this.state.closing = why;
@@ -259,11 +260,12 @@ class Broker {
       if (o.now() - st.openedAt > c.maxBars * o.tf * 60000) await this.flatten('maximum time in trade');
     } else {
       if (pos) {
-        if (o.now() - this.lastClose < 90000 && this.lastClose) { await this.emergency('a position appeared right after a trade closed (possible double fill)'); return; }
-        if (!this.unmanaged) this.alert(`A position of ${pos.size} on ${cid} exists that this bot did not open. It will not touch it. Manage it in TopstepX, or press Flatten.`);
+        if (this.lastClose && o.now() - this.lastClose < 20000 && !this.unmanaged && pos.size === this.lastQty) { await this.emergency('a position appeared seconds after the bot closed one, same size (possible double fill)'); return; }
+        if (!this.unmanaged) this.say('manual', `Your own trade: ${this.dirOfType(pos.type) || ''} ${pos.size} @ ${pos.averagePrice}. The bot leaves it alone and keeps scanning; it will not open trades of its own on this contract until yours is closed.`, null);
         this.unmanaged = pos;
         if (this.flatReq) await this.flatten(this.flatReq);
       } else {
+        if (this.unmanaged) this.say('manual', 'Your own trade is closed. The bot may trade again.', null);
         this.unmanaged = null; this.flatReq = null;
         const stray = os.filter(x => x.contractId === cid && this.ourIds.has(x.id)); for (const x of stray) { await api.cancel(a, x.id).catch(() => {}); this.say('cleanup', 'Cancelled a leftover order ' + x.id, true); }
       }
@@ -293,7 +295,7 @@ class Broker {
     } catch (e) { this.err('Could not confirm the exit price (' + e.message + '); using the last price.'); }
     const s = st.dir === 'long' ? 1 : -1, gross = (exit - st.entry) * s, pnl = gross * c.mult * st.qty - 2 * c.fee * st.qty, i = sim.bars.length - 1;
     const tr = { strat: st.strat, openI: st.openI, closeI: i, t: bar ? bar.t : this.o.now(), openT: st.openedAt, side: st.dir === 'long' ? 'Buy' : 'Sell', qty: st.qty, entry: st.entry, exit, reason, pnl, r: gross / Math.max(Math.abs(st.entry - st.stop), c.tick), day: bar ? bar.day : '' };
-    sim.ex.trades.push(tr); this.state = null; this.lastClose = this.o.now(); sim.realOpen = 0;
+    sim.ex.trades.push(tr); this.state = null; this.lastClose = this.o.now(); this.lastQty = tr.qty; sim.realOpen = 0;
     sim.note(i, 'executor', 'exit', `REAL ${tr.side === 'Buy' ? 'Long' : 'Short'} ${tr.qty} closed (${reason}) @ ${exit}, about ${usd(pnl)}`, pnl >= 0);
     this.say('exit', `Position closed (${reason}) @ ${exit}, about ${usd(pnl)}. The balance from Topstep is the final word.`, pnl >= 0);
   }

@@ -60,7 +60,8 @@ class LiveRunner {
       const now = o.now(), last = this.sim.bars[this.sim.bars.length - 1];
       if (now - this.lastBars >= o.barsEvery) { this.lastBars = now; await this.guard(() => this.pollBars()); }
       if (now - this.lastBal >= o.balEvery) { this.lastBal = now; await this.guard(() => this.pollBalance()); }
-      if (now - this.lastMgr >= o.mgrEvery) { this.lastMgr = now; await this.broker.manage(last.c); }
+      if ((this.broker.state || this.broker.unmanaged) && now - (this.lastPx || 0) >= 10000) { this.lastPx = now; try { const nb = await this.api.bars(this.contract.id, now - 15 * 60000, now, 1, o.live, 3, true); if (nb.length) { this.livePrice = nb[nb.length - 1].c; this.livePriceAt = now; } } catch (e) { } }
+      if (now - this.lastMgr >= o.mgrEvery) { this.lastMgr = now; await this.broker.manage(this.livePrice != null && now - this.livePriceAt < 60000 ? this.livePrice : last.c); }
       this.sim.audit(now, this.dataAgeSec(), { balAgeSec: this.lastBalOkAt ? (now - this.lastBalOkAt) / 1000 : null });
       this.lastError = null;
     } catch (e) { this.lastError = e.message; this.broker.err(e.message); }
