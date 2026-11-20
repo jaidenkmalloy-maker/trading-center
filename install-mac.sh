@@ -41,7 +41,14 @@ S
 chmod +x "$DEST/Start Trading Center.command"
 mkdir -p "$DESK"
 ln -sf "$DEST/Start Trading Center.command" "$DESK/Trading Center.command"
+# a real app in Applications (for the Dock, Launchpad and Spotlight)
+if command -v osacompile >/dev/null 2>&1; then
+  APPDIR="${TCC_APPS:-$HOME/Applications}"; mkdir -p "$APPDIR"; rm -rf "$APPDIR/Trading Center.app"
+  osacompile -o "$APPDIR/Trading Center.app" -e "do shell script \"open \" & quoted form of \"$DEST/Start Trading Center.command\"" >/dev/null 2>&1 && echo "Made the Trading Center app in $APPDIR." || true
+  [ -d "$APPDIR/Trading Center.app" ] && (command -v open >/dev/null && [ -z "$TCC_NO_START" ] && open -R "$APPDIR/Trading Center.app") || true
+fi
 echo ""
-echo "Done. Double-click \"Trading Center\" on your Desktop to start the app."
+echo "Done. Start the app from \"Trading Center\" in Launchpad or Spotlight, or the icon on your Desktop."
+echo "To keep it in your Dock: drag \"Trading Center\" from the Finder window that just opened onto the Dock."
 echo "Starting it now..."
 if [ -z "$TCC_NO_START" ]; then (command -v open >/dev/null && open "$DEST/Start Trading Center.command") || true; fi
