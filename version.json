@@ -1,6 +1,6 @@
 {
-  "version": "1.1.3",
-  "notes": "Your own trades are left alone: no alarms, never auto-closed; live price shown",
+  "version": "1.1.4",
+  "notes": "GEX: correct MES conversion for the pre-open reading",
   "files": {
     "app/index.html": "32ab590ddb0cba764d24adf117ac58ff7ab4fb94e7a8efd913f62c3e3d4c7f3b",
     "app/style.css": "c3e33aff76a504ac35e5ba68a2521d2b333af683e135575221b95fc3e9f60aff",
@@ -14,7 +14,7 @@
     "app/ui1.js": "750aa8fc5991050aab8ff9b98397c9d655be539cc8ddd15157a2309d20e0251c",
     "app/ui2.js": "98eee27c832f1410a2d0ebe8bc9372a214431024878f35f7a676f461e04b9761",
     "app/ui3.js": "8d3029a71d3080a71ea314872ff062a4e5097934476deba4311350fd557f0b79",
-    "app/ui4.js": "0636a40377dc218823132441d6ddca19550eeb62b9b126880b39aa9febd13320",
+    "app/ui4.js": "31c347b2b6459ef001a3868079c018b523f9f4e39bc5dac427c53aea6c3ec353",
     "server.js": "1379de9fbca905c98ac183107abedfc6ffc9da397bcb2457dc63906bc57af61d",
     "gex.js": "0c48b1b21c073f479aa5279b60ecb13471831e82f9f598c29c513c39848db8c4"
   }

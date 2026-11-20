@@ -105,10 +105,17 @@ if (IS_APP) {
 // ---- automatic GEX levels (free Cboe data, computed by the app program) ----
 const GX = { last: null, err: null, syncedAt: 0, busy: false };
 function gxPriceAt(ms) { const b = sim && sim.bars; if (!b || !b.length) return null; let best = null; for (let i = b.length - 1; i >= 0; i--) { if (b[i].t <= ms) { best = b[i]; break; } } return best && ms - best.t < 3 * 3600e3 ? best.c : null; }
+function gxBasis(s) {   // MES minus SPX, measured at a moment when both were really trading
+  const q = (s.fetchedAt || 0) - 15 * 60000, m = ctInfo(q).mins, b = sim && sim.bars;
+  if (m >= 510 && m < 900) { const mes = gxPriceAt(q); return mes == null ? null : Math.round((mes - s.spot) * 4) / 4; }   // stock market open: compare at the quote time
+  // stock market closed (e.g. the 8:00 CT reading): Cboe's SPX price is the last close, so compare with MES at that same close (3:00 pm CT)
+  if (!b) return null; for (let i = b.length - 1; i >= 0; i--) { if (b[i].t > q) continue; const bm = ctInfo(b[i].t).mins; if (bm === 885) return Math.round((b[i].c - s.spot) * 4) / 4; if (q - b[i].t > 4 * 864e5) break; }
+  return null;
+}
 function gxApply(day, s) {
   if (!s || !s.spot) return false; const cur = LV.byDay[day]; if (cur && !cur.auto) return false;   // never overwrite levels you typed
-  const mes = gxPriceAt((s.fetchedAt || 0) - 15 * 60000); if (mes == null) return false;
-  const off = Math.round((mes - s.spot) * 4) / 4, raw = {}, lv = [];
+  const off = gxBasis(s); if (off == null) return false;
+  const raw = {}, lv = [];
   for (const [k, f] of [['call', 'callWall'], ['put', 'putWall'], ['flip', 'flip'], ['ivHi', 'ivHi'], ['ivLo', 'ivLo']]) if (s[f] > 0) { raw[k] = s[f]; lv.push({ k, p: Math.round((s[f] + off) * 4) / 4 }); }
   if (!lv.length) return false;
   LV.byDay[day] = { auto: true, off, raw, lv, spot: s.spot, regime: s.regime }; return true;
