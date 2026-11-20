@@ -51,7 +51,7 @@ async function lvStart() {
 // ---- executor controls ----
 function lvMode(m) {
   const B = runner && runner.broker; if (!B) return;
-  if (m === 'watch' || m === 'dry') { lvGateMode = null; B.setMode(m); lvLastHtml.lvGate = null; setHtml('lvGate', ''); lvRender(); return; }
+  if (m === 'watch' || m === 'dry') { lvGateMode = null; B.setMode(m); lvLastHtml.lvGate = null; setHtml('lvGate', ''); lvModeMsg(); lvRender(); return; }
   lvGateMode = m; lvGateRender(); lvGateFocus();
 }
 function lvGateFocus() { setTimeout(() => { const g = $('gateTxt'), w = $('lvGate'); if (w) w.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (g) g.focus(); }, 50); }
@@ -64,7 +64,8 @@ function lvGateRender() {
     <div class="row" style="margin-top:8px"><span>To confirm, type the account name exactly: <b style="user-select:all">${esc(a.name)}</b></span></div><div class="row" style="margin-top:6px"><input id="gateTxt" placeholder="${esc(a.name)}" style="min-width:260px" oninput="gateCheck()" onkeydown="if(event.key==='Enter'&&!$('gateBtn').disabled)gateGo()"><button id="gateBtn" class="danger" disabled onclick="gateGo()">Enable ${m === 'auto' ? 'Automatic' : 'Confirm'} mode</button><button onclick="lvMode('watch')">Cancel</button></div></div>`;
 }
 function gateCheck() { const norm = x => String(x).replace(/\s+/g, '').toLowerCase(); $('gateBtn').disabled = norm($('gateTxt').value) !== norm(runner.account.name); }
-function gateGo() { const B = runner.broker; B.setMode(lvGateMode); lvGateMode = null; setHtml('lvGate', ''); lvRender(); }
+function gateGo() { const B = runner.broker; B.setMode(lvGateMode); lvGateMode = null; setHtml('lvGate', ''); lvModeMsg(); lvRender(); }
+function lvModeMsg() { const m = runner && runner.broker ? runner.broker.o.mode : 'watch'; lvMsg(m === 'auto' ? 'Live and in Automatic mode: approved trades are sent to Topstep with a stop and target.' : m === 'confirm' ? 'Live and in Confirm mode: each trade waits for your approval before it is sent.' : m === 'dry' ? 'Live and in Dry run: orders are prepared and logged, nothing is sent.' : 'Live and in Watch only mode. Nothing will be sent to Topstep until you change the mode.'); }
 async function lvApprove() { await runner.broker.approve(); lvRender(); render(); }
 function lvReject() { runner.broker.reject(); lvRender(); }
 async function lvFlatten() { const B = runner.broker; B.requestFlatten('you pressed Flatten'); if (!B.flatReq) { await B.flatten('you pressed Flatten'); } else await B.manage(sim.bars[sim.bars.length - 1].c); lvRender(); render(); }
