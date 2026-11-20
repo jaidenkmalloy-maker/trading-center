@@ -262,5 +262,42 @@ async function exportData() {
 }
 function expRender() {
   const el = document.getElementById('expBody'); if (!el) return;
-  el.innerHTML = `<div class="row"><button class="primary" onclick="exportData()" ${EXP.busy || !runner || !runner.sim ? 'disabled' : ''}>${EXP.busy ? 'Exporting…' : 'Export data'}</button>${EXP.busy ? '<button onclick="EXP.stop=true">Stop</button>' : ''}</div><div class="note">${esc(EXP.msg || 'Saves 5-minute candles for every market your account offers, going back as far as Topstep allows (up to about a year), plus the saved GEX levels, into one zip file in your Downloads folder. It takes a few minutes. Your login and account details are not included.')}</div>`;
+  el.innerHTML = `<div class="row"><button class="primary" id="expBtn" onclick="exportData()" ${EXP.busy || !runner || !runner.sim ? 'disabled' : ''}>${EXP.busy ? 'Working…' : 'Export data'}</button><button id="expLong" onclick="exportLong()" ${EXP.busy ? 'disabled' : ''}>Download long history (Yahoo)</button>${EXP.busy ? '<button onclick="EXP.stop=true">Stop</button>' : ''}</div><div class="note">${esc(EXP.msg || 'Saves 5-minute candles for every market your account offers, going back as far as Topstep allows (up to about a year), plus the saved GEX levels, into one zip file in your Downloads folder. Download long history gets about 2 years of hourly and 20+ years of daily candles for the same markets from Yahoo Finance (free). Each takes a few minutes. Your login and account details are never included.')}</div>`;
+}
+
+// ---- Download long history (Yahoo Finance, free): about 2 years of hourly and 20+ years of daily candles ----
+const YSYM = [['MES', 'ES=F'], ['MNQ', 'NQ=F'], ['MYM', 'YM=F'], ['M2K', 'RTY=F'], ['NKD', 'NKD=F'], ['MCL', 'CL=F'], ['NG', 'NG=F'], ['MGC', 'GC=F'], ['SIL', 'SI=F'], ['MHG', 'HG=F'], ['PL', 'PL=F'],
+  ['M6E', '6E=F'], ['M6A', '6A=F'], ['M6B', '6B=F'], ['6J', '6J=F'], ['6C', '6C=F'], ['6S', '6S=F'], ['6M', '6M=F'], ['ZT', 'ZT=F'], ['ZF', 'ZF=F'], ['ZN', 'ZN=F'], ['ZB', 'ZB=F'], ['UB', 'UB=F'],
+  ['ZC', 'ZC=F'], ['ZS', 'ZS=F'], ['ZW', 'ZW=F'], ['ZL', 'ZL=F'], ['ZM', 'ZM=F'], ['HE', 'HE=F'], ['LE', 'LE=F'], ['MBT', 'BTC=F'], ['MET', 'ETH=F'], ['VIX', '^VIX'], ['SPX', '^GSPC']];
+async function exportLong() {
+  if (EXP.busy) return; if (!IS_APP) { EXP.msg = 'This works in the app version (Start Trading Center).'; return expRender(); }
+  EXP.busy = true; EXP.stop = false; const files = [], info = [], gap = EXP.gap == null ? 1200 : EXP.gap;
+  try {
+    for (let k = 0; k < YSYM.length && !EXP.stop; k++) {
+      const [mk, ys] = YSYM[k], row = { market: mk, yahoo: ys, sets: [] };
+      for (const [iv, rg] of [['1h', '730d'], ['1d', 'max']]) {
+        if (EXP.stop) break; EXP.msg = `Downloading ${mk} (${k + 1} of ${YSYM.length}), ${iv === '1h' ? 'hourly' : 'daily'} candles…`; expRender();
+        let j = null, err = null;
+        for (let tryN = 0; tryN < 3 && !j; tryN++) {
+          try { const r = await fetch(`/app/yahoo?s=${encodeURIComponent(ys)}&i=${iv}&r=${rg}`, { cache: 'no-store' }); if (r.status === 404 && tryN === 0) { err = 'the app program needs a restart to do this'; break; } const x = await r.json(); if (!r.ok) throw new Error(x.error || r.status); j = x; }
+          catch (e) { err = e.message; if (/429/.test(err)) { EXP.msg = 'Yahoo asked to slow down; waiting 30 seconds…'; expRender(); await sleep(30000); } else await sleep(2000); }
+        }
+        await sleep(gap);
+        const res = j && j.chart && j.chart.result && j.chart.result[0];
+        if (!res || !res.timestamp) { row.sets.push({ interval: iv, rows: 0, error: err || (j && j.chart && j.chart.error && j.chart.error.description) || 'no data' }); if (err && /restart/.test(err)) throw new Error('Close the black app window and start the app again from the Desktop icon, then try once more.'); continue; }
+        const q = res.indicators.quote[0], ts = res.timestamp, lines = [];
+        for (let i = 0; i < ts.length; i++) { const o = q.open[i], h = q.high[i], l = q.low[i], c = q.close[i]; if ([o, h, l, c].some(v => v == null)) continue; lines.push(new Date(ts[i] * 1000).toISOString() + ',' + o + ',' + h + ',' + l + ',' + c + ',' + (q.volume && q.volume[i] || 0)); }
+        files.push({ name: `${mk}_${iv}.csv`, text: 'time_utc,open,high,low,close,volume\n' + lines.join('\n') + '\n' });
+        row.sets.push({ interval: iv, rows: lines.length, from: lines.length ? lines[0].slice(0, 10) : null, to: lines.length ? lines[lines.length - 1].slice(0, 10) : null, exchangeTimezone: res.meta && res.meta.exchangeTimezoneName });
+      }
+      info.push(row);
+    }
+    files.push({ name: 'about.json', text: JSON.stringify({ source: 'Yahoo Finance continuous front-month futures (unofficial, for personal research)', exported: new Date().toISOString(), note: 'times are UTC; rolls between contract months can cause small jumps', markets: info }, null, 1) });
+    EXP.msg = 'Packing the file…'; expRender();
+    const blob = await makeZip(files), name = 'long-history-' + new Date().toISOString().slice(0, 10) + '.zip';
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 60000);
+    const ok = info.filter(x => x.sets.some(s => s.rows)).length, rows = info.reduce((s, x) => s + x.sets.reduce((a, y) => a + (y.rows || 0), 0), 0);
+    EXP.msg = `Done: ${ok} of ${YSYM.length} markets, ${rows.toLocaleString()} candles, ${(blob.size / 1e6).toFixed(1)} MB, saved to your Downloads folder as ${name}. Send that file to Claude.`;
+  } catch (e) { EXP.msg = 'Download stopped: ' + e.message; }
+  finally { EXP.busy = false; expRender(); }
 }

@@ -13,6 +13,7 @@ if (process.env.TCC_PORT) CFG.port = +process.env.TCC_PORT;
 if (process.env.TCC_UPSTREAM) CFG.upstream = process.env.TCC_UPSTREAM;
 if (process.env.TCC_UPDATE_URL != null) CFG.updateUrl = process.env.TCC_UPDATE_URL;
 if (process.env.TCC_NO_OPEN) CFG.openWindow = false;
+CFG.yahooBases = process.env.TCC_YAHOO_BASE ? [process.env.TCC_YAHOO_BASE] : ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
 CFG.cboeUrl = process.env.TCC_CBOE_URL || CFG.cboeUrl || GEX.CBOE_URL;
 const GDIR = path.join(DIR, 'data', 'gex');
 const VERSION_FILE = path.join(DIR, 'version.json');
@@ -135,6 +136,19 @@ const server = http.createServer(async (req, res) => {
       try { const lv = processGex(JSON.parse((await readBody(req, 300e6)).toString('utf8')), 'browser'); return send(res, 200, { ok: true, levels: lv }); } catch (e) { return send(res, 200, { ok: false, error: e.message }); }
     }
     if (u.pathname === '/app/gex/history') return send(res, 200, { days: gexHistory() });
+    if (u.pathname === '/app/yahoo') {   // long price history for research: only Yahoo's chart data, only safe parameters
+      const sym = u.searchParams.get('s') || '', iv = u.searchParams.get('i') || '', rg = u.searchParams.get('r') || '';
+      if (!/^[\^A-Z0-9=.\-]{1,12}$/.test(sym) || !['5m', '15m', '1h', '1d', '1wk'].includes(iv) || !/^(\d{1,4}d|\d{1,2}y|max)$/.test(rg)) return send(res, 400, { error: 'bad request' });
+      let last = 'no answer';
+      for (const base of CFG.yahooBases) {
+        try {
+          const r = await fetch(base + '/v8/finance/chart/' + encodeURIComponent(sym) + '?interval=' + iv + '&range=' + rg + '&includePrePost=true&events=div%2Csplit', { headers: { 'user-agent': UA, accept: 'application/json' }, signal: AbortSignal.timeout(45000) });
+          if (r.ok) return send(res, 200, Buffer.from(await r.arrayBuffer()), 'application/json');
+          last = 'Yahoo answered ' + r.status;
+        } catch (e) { last = e.message; }
+      }
+      return send(res, 502, { error: last });
+    }
     if (u.pathname === '/app/kv-all' && req.method === 'GET') return send(res, 200, kvAll());
     if (u.pathname === '/app/kv' && (req.method === 'POST' || req.method === 'DELETE')) {
       if (!localOrigin(req)) return send(res, 403, { error: 'wrong origin' }); const k = u.searchParams.get('key') || '';

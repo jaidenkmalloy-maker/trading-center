@@ -1,6 +1,6 @@
 {
-  "version": "1.5.0",
-  "notes": "Export data: 5-minute candles for every market in one file",
+  "version": "1.6.0",
+  "notes": "Download long history: 2 years hourly and 20+ years daily from Yahoo",
   "files": {
     "app/index.html": "b921dcf99c831074d526e5fa5192a343262626f950c1d094a86f6dcb7476d48b",
     "app/style.css": "0aacb726f96a57e9357547589591cef24dd7a4f72b953ea9f4802e327a489579",
@@ -15,8 +15,8 @@
     "app/ui1.js": "750aa8fc5991050aab8ff9b98397c9d655be539cc8ddd15157a2309d20e0251c",
     "app/ui2.js": "98eee27c832f1410a2d0ebe8bc9372a214431024878f35f7a676f461e04b9761",
     "app/ui3.js": "91cc729a12e664e594dbc96a47bde219b2d740391dd8de6fb9a968d8eb87fded",
-    "app/ui4.js": "e3f5b591326ce5d5ffe3cb830901e04548dbffe7fd8a021f9825bfb82292af33",
-    "server.js": "0853be573693e7f0a7d93ffc723991a07bd6381b6235b1f9fc5c6a1b1a13ba85",
+    "app/ui4.js": "f628e3e784df545ea08262a871090760d7d9034fced9d5fc9df5eddc906ade93",
+    "server.js": "7fc9b193659c4597790af2e717418048a0081975a32d9ba176c73f85c06bc1ee",
     "gex.js": "0c48b1b21c073f479aa5279b60ecb13471831e82f9f598c29c513c39848db8c4"
   }
 }
