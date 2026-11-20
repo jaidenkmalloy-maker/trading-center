@@ -52,17 +52,18 @@ async function lvStart() {
 function lvMode(m) {
   const B = runner && runner.broker; if (!B) return;
   if (m === 'watch' || m === 'dry') { lvGateMode = null; B.setMode(m); lvLastHtml.lvGate = null; setHtml('lvGate', ''); lvRender(); return; }
-  lvGateMode = m; lvGateRender();
+  lvGateMode = m; lvGateRender(); lvGateFocus();
 }
+function lvGateFocus() { setTimeout(() => { const g = $('gateTxt'), w = $('lvGate'); if (w) w.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (g) g.focus(); }, 50); }
 function lvGateRender() {
   const m = lvGateMode; if (!m) { setHtml('lvGate', ''); return; } const a = runner.account;
   lvLastHtml.lvGate = null;
   $('lvGate').innerHTML = `<div class="bigwarn"><b>${m === 'auto' ? 'Automatic' : 'Confirm-each-order'} mode sends REAL orders to ${esc(a.name)} (id ${esc(a.id)}, balance ${usd(a.balance)}).</b><br>
     Topstep treats API orders as final: there is no review or reversal. The bot will only trade MES-style setups approved by all five systems, with a stop and target on every trade, but it can still lose money, and a faulty assumption in this app could cost you the Combine.
     ${m === 'auto' ? '<br><b>Automatic mode places orders without asking.</b> Only use it after Dry run and Confirm mode have behaved well for several days.' : ''}
-    <div class="row" style="margin-top:8px"><input id="gateTxt" placeholder="Type the account name to confirm" style="min-width:260px" oninput="gateCheck()"><button id="gateBtn" class="danger" disabled onclick="gateGo()">Enable ${m === 'auto' ? 'Automatic' : 'Confirm'} mode</button><button onclick="lvMode('watch')">Cancel</button></div></div>`;
+    <div class="row" style="margin-top:8px"><span>To confirm, type the account name exactly: <b style="user-select:all">${esc(a.name)}</b></span></div><div class="row" style="margin-top:6px"><input id="gateTxt" placeholder="${esc(a.name)}" style="min-width:260px" oninput="gateCheck()" onkeydown="if(event.key==='Enter'&&!$('gateBtn').disabled)gateGo()"><button id="gateBtn" class="danger" disabled onclick="gateGo()">Enable ${m === 'auto' ? 'Automatic' : 'Confirm'} mode</button><button onclick="lvMode('watch')">Cancel</button></div></div>`;
 }
-function gateCheck() { $('gateBtn').disabled = $('gateTxt').value.trim().toLowerCase() !== String(runner.account.name).toLowerCase(); }
+function gateCheck() { const norm = x => String(x).replace(/\s+/g, '').toLowerCase(); $('gateBtn').disabled = norm($('gateTxt').value) !== norm(runner.account.name); }
 function gateGo() { const B = runner.broker; B.setMode(lvGateMode); lvGateMode = null; setHtml('lvGate', ''); lvRender(); }
 async function lvApprove() { await runner.broker.approve(); lvRender(); render(); }
 function lvReject() { runner.broker.reject(); lvRender(); }

@@ -1,6 +1,6 @@
 {
-  "version": "1.8.0",
-  "notes": "GEX mode: trade only the GEX levels live, 1 contract",
+  "version": "1.8.1",
+  "notes": "Easier Automatic/Confirm confirmation box",
   "files": {
     "app/index.html": "ec28f2796f84eb93236260369543e5aba127a85bb60ccee38a8b8408fe33ee72",
     "app/style.css": "996f21d16b7df16734f51d4aa8f916c8694fff2d824fbe53389d7313c2eb3034",
@@ -15,7 +15,7 @@
     "app/engine8.js": "61d5ce94fa286cc73423bc811af7dd809a645dd0e6c34e318cdccd768dbb791f",
     "app/ui1.js": "750aa8fc5991050aab8ff9b98397c9d655be539cc8ddd15157a2309d20e0251c",
     "app/ui2.js": "98eee27c832f1410a2d0ebe8bc9372a214431024878f35f7a676f461e04b9761",
-    "app/ui3.js": "91cc729a12e664e594dbc96a47bde219b2d740391dd8de6fb9a968d8eb87fded",
+    "app/ui3.js": "a21bc4a3057606c6a62021aefbe4ada5e135f67e8a65be6302370f724a344d46",
     "app/ui4.js": "bbb81e6f44243253351f621e950f3af61f681a7fc6dd7516645045f44dfae9d4",
     "server.js": "7fc9b193659c4597790af2e717418048a0081975a32d9ba176c73f85c06bc1ee",
     "gex.js": "0c48b1b21c073f479aa5279b60ecb13471831e82f9f598c29c513c39848db8c4"
