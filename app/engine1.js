@@ -3,7 +3,7 @@ const TICK = 0.0005;
 const DEFAULTS = {
   // account / Topstep rules (verify these against your Topstep account)
   start: 50000, maxLoss: 2000, profitTarget: 3000, dailyStop: 1000,
-  consistencyPct: 50, minDays: 2, maxContracts: 10,
+  consistencyPct: 55, minDays: 2, maxContracts: 10,
   // risk sizing
   maxRiskPerTrade: 300, riskFracOfBuffer: 0.15, bufferHaltPct: 10,
   // instrument (picked under Settings; these are the copper defaults)

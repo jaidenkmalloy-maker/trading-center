@@ -38,7 +38,8 @@ class LiveRunner {
     for (const k of Object.keys(cfg)) if (cfg[k] === undefined) delete cfg[k];
     if (!Array.isArray(cfg.strategies)) cfg.strategies = [];     // live: trade only what the Backtester approves
     this.sim = new LiveSim(bars, cfg); this.broker = new Broker(this.api, this.sim, { mode: 'watch', accountId, contract, tf: o.tf, now: o.now });
-    this.sim.initAccount(this.account.balance); this.learner = new Lab(this.sim); this.sim.lab = this.learner; this.probation = new Probation(this.sim, this.o.store, 'probation_' + contract.id); this.sym = symbol; this.markets = new MarketWatch(this, this.o.scanList); if (this.probation.promoted.length) this.sim.setStrategies(this.probation.promoted.slice()); this.sim.onStrategies = l => this.onLearned && this.onLearned({ strategies: l }); this.status = 'running'; this.lastBars = this.lastMgr = this.lastBal = now;
+    this.sim.initAccount(this.account.balance); this.learner = new Lab(this.sim); this.sim.lab = this.learner; { const st = this.o.store, k = 'probation_' + symbol, old = 'probation_' + contract.id; try { if (!st.get(k) && st.get(old)) st.set(k, st.get(old)); } catch (e) { } }   // keyed by market, so it survives the quarterly contract roll
+    this.probation = new Probation(this.sim, this.o.store, 'probation_' + symbol); this.sym = symbol; this.markets = new MarketWatch(this, this.o.scanList); if (this.probation.promoted.length) this.sim.setStrategies(this.probation.promoted.slice()); this.sim.onStrategies = l => this.onLearned && this.onLearned({ strategies: l }); this.status = 'running'; this.lastBars = this.lastMgr = this.lastBal = now;
     this.sim.note(this.sim.i - 1, 'scanner', 'info', `Live data loaded: ${bars.length} candles (${stored ? 'stored history plus new' : 'fresh download'}). Contract ${contract.name}, tick ${contract.tickSize}, $${(contract.tickValue / contract.tickSize).toFixed(2)} per point.`, true);
     return this.sim;
   }
