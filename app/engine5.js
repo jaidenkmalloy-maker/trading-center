@@ -205,11 +205,29 @@ class Broker {
       const ps = (await api.positions(a)).filter(p => p.size > 0), os = (await api.openOrders(a)).filter(x => x.contractId === cid);
       if (ps.length || os.length) { if (this.unmanaged || ps.length) { this.say('skip', 'Setup approved, but you have your own trade open on this contract, so the bot stayed out.', null); return; } this.alert('Order not sent: the account has a working order on this contract that the bot did not place. Check TopstepX.'); return; }
       const tag = 'cc' + o.now(), P = this.payloads(t); P.entry.customTag = tag + 'E'; P.stop.customTag = tag + 'S'; P.target.customTag = tag + 'T';
-      const er = await api.place(P.entry); this.ourIds.add(er.orderId); this.say('order', `Entry sent: ${t.side} ${t.qty} at market (order ${er.orderId}).`, true);
+      const BR = this.br || (this.br = this.loadBr());
+      let er = null, bracketed = false;
+      if (BR.mode !== 'off') {   // ask Topstep to hold the stop and target as a linked pair: one filling cancels the other, even if this computer is offline
+        const slT = Math.max(6, Math.round(Math.abs(t.planned - t.stop) / c.tick)), tpT = Math.max(6, Math.round(Math.abs(t.target - t.planned) / c.tick));
+        const E = Object.assign({}, P.entry, { stopLossBracket: { ticks: BR.sign > 0 ? slT : (long ? -slT : slT), type: 4 }, takeProfitBracket: { ticks: BR.sign > 0 ? tpT : (long ? tpT : -tpT), type: 1 } });
+        try { er = await api.place(E); bracketed = true; }
+        catch (e) {
+          if (/Position Brackets|Auto OCO/i.test(e.message)) { BR.mode = 'off'; this.saveBr(); this.say('data', 'Topstep\'s Auto OCO Brackets setting is off, so the stop and target are placed as two separate orders (the app cancels the leftover one). To have Topstep link them, switch on Auto OCO Brackets in TopstepX: Settings, Risk Settings (only possible while flat).', null); }
+          else throw e;
+        }
+      }
+      if (!er) er = await api.place(P.entry);
+      this.ourIds.add(er.orderId); this.say('order', `Entry sent: ${t.side} ${t.qty} at market (order ${er.orderId})${bracketed ? ' with a linked stop and target' : ''}.`, true);
       let pos = null;
       for (let k = 0; k < o.fillTries && !pos; k++) { await sleep(o.pollMs); pos = (await api.positions(a)).find(p => p.contractId === cid && p.size > 0); }
       if (!pos) {
-        const open = (await api.openOrders(a)).filter(x => x.id === er.orderId); for (const x of open) await api.cancel(a, x.id).catch(() => {});
+        const open = (await api.openOrders(a)).filter(x => x.id === er.orderId);
+        if (bracketed && !open.length) {   // entry filled but the position closed at once: Topstep read the stop/target numbers the other way round
+          for (const x of (await api.openOrders(a)).filter(x => x.contractId === cid)) await api.cancel(a, x.id).catch(() => {});
+          BR.sign = -BR.sign; BR.verified = false; this.saveBr();
+          this.alert('The entry filled but Topstep closed it straight away: the linked stop/target were put on the wrong side. The app has switched how it asks and the next trade will be correct. Check TopstepX to be sure you are flat.'); return;
+        }
+        for (const x of open) await api.cancel(a, x.id).catch(() => {});
         this.alert('Entry did not fill in time and was cancelled. Check TopstepX to be sure you are flat.'); return;
       }
       try { await api.cancel(a, er.orderId); } catch (e) { /* already filled: expected */ }
@@ -217,17 +235,36 @@ class Broker {
       this.typeMap[dir] = pos.type;
       const size = pos.size, entry = +pos.averagePrice;
       if (long ? !(entry > t.stop && entry < t.target) : !(entry < t.stop && entry > t.target)) { await this.emergency(`filled at ${entry}, already beyond the stop or target`); return; }
-      P.stop.size = size; P.target.size = size; let so, to;
-      try { so = await api.place(P.stop); this.ourIds.add(so.orderId); } catch (e) { await this.emergency('could not place the stop: ' + e.message); return; }
-      try { to = await api.place(P.target); this.ourIds.add(to.orderId); } catch (e) { await this.emergency('could not place the target: ' + e.message); return; }
+      P.stop.size = size; P.target.size = size; let so = null, to = null, linked = false;
+      if (bracketed) {   // read the linked pair back from Topstep and check it is on the right sides
+        let legs = [];
+        for (let k = 0; k < 6 && legs.length < 2; k++) { legs = (await api.openOrders(a)).filter(x => x.contractId === cid && x.id !== er.orderId && (x.type === 4 || x.type === 1)); if (legs.length < 2) await sleep(o.pollMs); }
+        const sl = legs.find(x => x.type === 4), tp = legs.find(x => x.type === 1);
+        const okSides = sl && tp && (long ? (+sl.stopPrice < entry && +tp.limitPrice > entry) : (+sl.stopPrice > entry && +tp.limitPrice < entry));
+        if (okSides) { so = { orderId: sl.id }; to = { orderId: tp.id }; t.stop = +sl.stopPrice; t.target = +tp.limitPrice; linked = true; this.ourIds.add(sl.id); this.ourIds.add(tp.id); if (!BR.verified) { BR.verified = true; this.saveBr(); } }
+        else {
+          for (const x of legs) await api.cancel(a, x.id).catch(() => { });
+          if (sl || tp) { BR.sign = -BR.sign; BR.verified = false; this.saveBr(); this.say('data', 'Topstep placed the linked stop and target on the wrong side, so the app removed them and switched how it asks for next time; this trade gets separate orders instead.', false); }
+          else { this.say('data', 'Topstep did not show a linked stop and target after the fill, so separate ones are placed instead.', false); }
+          const still = (await api.positions(a)).find(p => p.contractId === cid && p.size > 0);
+          if (!still) { this.say('exit', 'The position was already closed by Topstep (a linked order on the wrong side filled at once). Small cost; the setting is corrected for the next trade.', false); return; }
+        }
+      }
+      if (!linked) {
+        try { so = await api.place(P.stop); this.ourIds.add(so.orderId); } catch (e) { await this.emergency('could not place the stop: ' + e.message); return; }
+        try { to = await api.place(P.target); this.ourIds.add(to.orderId); } catch (e) { await this.emergency('could not place the target: ' + e.message); return; }
+      }
       this.slips.push(Math.abs(entry - t.planned) / c.tick);
       const bar = sim.bars[sim.bars.length - 1];
       this.state = { strat: sig && sig.strat, stratName: sig && sig.name, dir, qty: size, entry, stop: t.stop, target: t.target, stopId: so.orderId, tpId: to.orderId, openedAt: o.now(), openI: sim.bars.length - 1, tag, missStop: 0, missTp: 0, planned: t.planned };
       sim.rules.nToday++; sim.rules.tradedDays.add(bar ? bar.day : '');
-      this.say('fill', `Filled ${dir} ${size} @ ${entry} (planned ${t.planned}). Stop ${t.stop} and target ${t.target} are working.`, true);
+      this.state.linked = linked; this.say('fill', `Filled ${dir} ${size} @ ${entry} (planned ${t.planned}). Stop ${t.stop} and target ${t.target} are working${linked ? ' as a linked pair at Topstep (one cancels the other, even if this computer goes offline)' : ''}.`, true);
     } catch (e) { this.err('Order flow stopped: ' + e.message); }
     finally { this.executing = false; }
   }
+  loadBr() { try { return Object.assign({ mode: 'try', sign: 1, verified: false }, JSON.parse((this.o.store && this.o.store.get('brackets')) || '{}')); } catch (e) { return { mode: 'try', sign: 1, verified: false }; } }
+  saveBr() { try { if (this.o.store) this.o.store.set('brackets', JSON.stringify(this.br)); } catch (e) { } }
+  bracketsRetry() { this.br = Object.assign(this.loadBr(), { mode: 'try' }); this.saveBr(); }
   requestFlatten(why) { if (this.state || (this.unmanaged && /you pressed/.test(why))) this.flatReq = why;   // your own trades are only closed when you press Flatten
     if (this.pending) { this.pending = null; this.say('skip', 'Pending order cancelled: ' + why, null); } }
   async flatten(why, emergency) {
