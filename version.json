@@ -1,6 +1,6 @@
 {
-  "version": "1.8.3",
-  "notes": "GEX walls: call wall above the price, put wall below it",
+  "version": "1.9.0",
+  "notes": "GEX mode trades wall breaks on negative-gamma days",
   "files": {
     "app/index.html": "ec28f2796f84eb93236260369543e5aba127a85bb60ccee38a8b8408fe33ee72",
     "app/style.css": "996f21d16b7df16734f51d4aa8f916c8694fff2d824fbe53389d7313c2eb3034",
@@ -10,13 +10,13 @@
     "app/engine3.js": "15b839f55ff9a0c7933ee16977690513fe0925d9df4daca7f89f5a9fb6e6233e",
     "app/engine4.js": "8407e4c56d4bb0df0a01d0f33aecd42b7c05608ff367af2ad1679a1d761b742b",
     "app/engine5.js": "eccae3d3a1fecf4f0a29b7700e045ac9540b5a013209f37da15ca09bb1a45975",
-    "app/engine6.js": "6d454ff64fe4e383b9b455347461463a1874dc4d52927826544031f6256098d5",
-    "app/engine7.js": "84d9edb12d895df2605a8a607725d2d052cd2f3ae27f05c44f6ccd9d1e47e893",
+    "app/engine6.js": "bc16eecaa22221bde12230f89b687c264661b54dcbb0584dc32f567971adf419",
+    "app/engine7.js": "fe5419955d9af2e89014f797dfa049d14dfbc2fa6fc7ab9499d21fd3035fe76b",
     "app/engine8.js": "61d5ce94fa286cc73423bc811af7dd809a645dd0e6c34e318cdccd768dbb791f",
     "app/ui1.js": "750aa8fc5991050aab8ff9b98397c9d655be539cc8ddd15157a2309d20e0251c",
     "app/ui2.js": "98eee27c832f1410a2d0ebe8bc9372a214431024878f35f7a676f461e04b9761",
     "app/ui3.js": "38156398192f5e39a362d69d879ed06c2f45cd54989c1cd1fb1d7b965a9eaad1",
-    "app/ui4.js": "bbb81e6f44243253351f621e950f3af61f681a7fc6dd7516645045f44dfae9d4",
+    "app/ui4.js": "a1fee88bbe3e8282e609be9a708a1bdfc050928abaa02d6a59122f9c5db7a035",
     "server.js": "25064beaf63cc20220562569571db3b2efa4438cbf1a78e60b396e3c110d793e",
     "gex.js": "994ab5a2aecf75ce9cfd5b77ea69b3ee42a94933ae7550c4e4504349cad8c6ab"
   }

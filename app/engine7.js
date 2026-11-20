@@ -53,6 +53,15 @@ class LvlStrat {   // trades the bounce or rejection at the daily option levels 
     const bar = this.b[i], c = this.c, p = this.p, L = c.levelsByDay && c.levelsByDay[bar.day];
     if (bar.day !== this.day) { this.day = bar.day; this.fired = {}; }
     if (!L || !L.lv || !L.lv.length || i < 30 || !winOk(bar, c)) return null;
+    if (L.regime === 'negative' && p.negBreak) {   // negative gamma: walls tend to break, so trade the break instead of the bounce
+      const atr = this.ind.atr[i], pc = i > 0 ? this.b[i - 1].c : bar.o;
+      for (const l of L.lv) {
+        const P = +l.p, key = 'b' + l.k; if (!(P > 0) || this.fired[key] || l.k === 'flip') continue;
+        if ((l.k === 'put' || l.k === 'ivLo') && pc >= P && bar.c < P && bar.c < bar.o) { this.fired[key] = 1; const stop = P + 0.5 * atr, s = mkSig(c, i, bar, 'short', stop, bar.c - p.m * (stop - bar.c), { level: l.k + ' break' }); if (s) return s; }
+        if ((l.k === 'call' || l.k === 'ivHi') && pc <= P && bar.c > P && bar.c > bar.o) { this.fired[key] = 1; const stop = P - 0.5 * atr, s = mkSig(c, i, bar, 'long', stop, bar.c + p.m * (bar.c - stop), { level: l.k + ' break' }); if (s) return s; }
+      }
+      return null;
+    }
     if (p.posOnly && L.regime === 'negative') return null;   // walls hold best when dealers are long gamma
     const atr = this.ind.atr[i], tol = 0.15 * atr;
     for (const l of L.lv) {

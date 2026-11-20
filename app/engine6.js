@@ -83,10 +83,10 @@ class LiveRunner {
     const S = this.sim, c = S.c, st = this.o.store; let saved = {}; try { saved = JSON.parse(st.get('gexonly') || '{}'); } catch (e) { }
     if (on) {
       const prev = saved.on ? saved.prev : { maxContracts: c.maxContracts, maxTradesPerDay: c.maxTradesPerDay, gate: c.gate, learnMode: this.o.learnMode };
-      const p = { k: 1, m: 2, use: 'all', mtf: 0, posOnly: 1 }, g = { id: 'lvl', params: p, key: stratKey('lvl', p), label: 'GEX levels: bounce at the walls on positive-gamma days' };
+      const p = { k: 1, m: 2, use: 'all', mtf: 0, posOnly: 1, negBreak: 1 }, g = { id: 'lvl', params: p, key: stratKey('lvl', p), label: 'GEX levels: bounce at the walls on positive-gamma days, trade breaks on negative-gamma days' };
       c.maxContracts = 1; c.maxTradesPerDay = 2; c.gate = 'off'; this.o.learnMode = 'off'; this.o.scanMarkets = false; S.gexOnly = true;
       S.setStrategies([g]); st.set('gexonly', JSON.stringify({ on: true, prev }));
-      S.note(Math.max(0, S.i - 1), 'scanner', 'mode', 'GEX-only mode on: trading only the GEX levels, 1 contract, at most 2 trades a day, positive-gamma days only.', true);
+      S.note(Math.max(0, S.i - 1), 'scanner', 'mode', 'GEX-only mode on: trading only the GEX levels, 1 contract, at most 2 trades a day (bounces on positive-gamma days, breaks on negative-gamma days).', true);
     } else {
       const prev = saved.prev || {}; if (prev.maxContracts != null) c.maxContracts = prev.maxContracts; if (prev.maxTradesPerDay != null) c.maxTradesPerDay = prev.maxTradesPerDay; if (prev.gate) c.gate = prev.gate;
       this.o.learnMode = prev.learnMode || 'suggest'; this.o.scanMarkets = true; S.gexOnly = false; S.setStrategies((this.probation && this.probation.promoted || []).slice());
