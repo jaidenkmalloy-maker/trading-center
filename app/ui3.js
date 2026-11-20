@@ -41,7 +41,7 @@ async function lvStart() {
     r.o.cfg = Object.assign({}, r.o.cfg, { levelsByDay: LV.byDay });
     const s = await r.start(accId, c, r._sym); sim = s; synthetic = false; srcLabel = 'LIVE · ' + r.account.name;
     r.onChange = () => { render(); lvRender(); }; r.onLearned = () => { };
-    if (lvTimer) lvTimer.stop(); lvTimer = kpStartLive(r); kpRender(); lvRenderLevels();
+    if (lvTimer) lvTimer.stop(); lvTimer = kpStartLive(r); kpRender(); lvRenderLevels(); expRender();
     $('connStep2').style.display = 'none'; $('lvCtlWrap').style.display = 'block';
     lvMsg(`Live and in Watch only mode. The Strategy Lab is testing strategies now. ${s.bars.length} candles loaded (${fmtT(s.bars[0].t)} to ${fmtT(s.bars[s.bars.length - 1].t)} CT). Nothing will be sent to Topstep until you change the mode.`);
     buildSettings(); render(); lvRender(); chatRender(); r.maybeLearn();

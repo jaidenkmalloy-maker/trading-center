@@ -1,8 +1,8 @@
 {
-  "version": "1.4.0",
-  "notes": "Everything is remembered across restarts and saved to the app folder",
+  "version": "1.5.0",
+  "notes": "Export data: 5-minute candles for every market in one file",
   "files": {
-    "app/index.html": "edb78d64fe9df3323e4703977239a860a294dd2d13df5c91eacd3c12b7b4f182",
+    "app/index.html": "b921dcf99c831074d526e5fa5192a343262626f950c1d094a86f6dcb7476d48b",
     "app/style.css": "0aacb726f96a57e9357547589591cef24dd7a4f72b953ea9f4802e327a489579",
     "app/restore.js": "4073d4f455edcb3863eb796136ec867adc56c1c87cfc99817fa787b3783191bf",
     "app/engine1.js": "0d69881d91c4b1b1672e65d6e374786c8e853f78c425335e52f1e14072689611",
@@ -14,8 +14,8 @@
     "app/engine7.js": "a4ef9adb6664cb507cba41323a9ba67cc11df61926ef22ed2737c414a2fc732c",
     "app/ui1.js": "750aa8fc5991050aab8ff9b98397c9d655be539cc8ddd15157a2309d20e0251c",
     "app/ui2.js": "98eee27c832f1410a2d0ebe8bc9372a214431024878f35f7a676f461e04b9761",
-    "app/ui3.js": "30a26acafa45236c5a7776d6028f17e7701b653d8c0af7ce44e7858e40ac02a8",
-    "app/ui4.js": "fea49376c94858b714b907d50e7aec10066f1177ef8b4e26d031006b104c6d49",
+    "app/ui3.js": "91cc729a12e664e594dbc96a47bde219b2d740391dd8de6fb9a968d8eb87fded",
+    "app/ui4.js": "e3f5b591326ce5d5ffe3cb830901e04548dbffe7fd8a021f9825bfb82292af33",
     "server.js": "0853be573693e7f0a7d93ffc723991a07bd6381b6235b1f9fc5c6a1b1a13ba85",
     "gex.js": "0c48b1b21c073f479aa5279b60ecb13471831e82f9f598c29c513c39848db8c4"
   }

@@ -190,3 +190,77 @@ function mktRender() {
 try { const c0 = JSON.parse(localStorage.getItem('ccL_chats') || 'null'); if (c0 && typeof c0 === 'object') { chats = c0; if (typeof chatRender === 'function') try { chatRender(); } catch (e) { } } } catch (e) { }
 const chatSave = () => { try { const o = {}; for (const [k, v] of Object.entries(chats)) o[k] = (v || []).filter(m => !m.action && m.text !== 'Thinking…').slice(-40); localStorage.setItem('ccL_chats', JSON.stringify(o)); } catch (e) { } };
 if (typeof window !== 'undefined') { setInterval(chatSave, 30000); window.addEventListener('pagehide', chatSave); }
+
+// ---- Export data: 5-minute candles for every market, as far back as Topstep allows, in one zip file ----
+const EXP = { busy: false, msg: '', stop: false };
+const MCODES = 'FGHJKMNQUVXZ';
+function olderIds(id, n) {   // CON.F.US.MES.Z26 -> the same market's earlier contract months
+  const m = /^(.*\.)([FGHJKMNQUVXZ])(\d{2})$/.exec(id); if (!m) return [];
+  let mi = MCODES.indexOf(m[2]), yy = +m[3]; const out = [];
+  for (let k = 0; k < n; k++) { mi--; if (mi < 0) { mi = 11; yy--; } out.push(m[1] + MCODES[mi] + String(yy).padStart(2, '0')); }
+  return out;
+}
+const crcTable = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = u => { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = crcTable[(c ^ u[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+async function deflateRaw(u) { if (typeof CompressionStream === 'undefined') return null; const cs = new CompressionStream('deflate-raw'); const out = new Response(new Blob([u]).stream().pipeThrough(cs)); return new Uint8Array(await out.arrayBuffer()); }
+async function makeZip(files) {   // files: [{ name, text }]
+  const enc = new TextEncoder(), parts = [], cdir = []; let off = 0;
+  for (const f of files) {
+    const data = enc.encode(f.text), crc = crc32(data), comp = await deflateRaw(data), method = comp ? 8 : 0, body = comp || data, name = enc.encode(f.name);
+    const h = new DataView(new ArrayBuffer(30)); h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(8, method, true); h.setUint32(14, crc, true); h.setUint32(18, body.length, true); h.setUint32(22, data.length, true); h.setUint16(26, name.length, true);
+    parts.push(new Uint8Array(h.buffer), name, body);
+    const c = new DataView(new ArrayBuffer(46)); c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(10, method, true); c.setUint32(16, crc, true); c.setUint32(20, body.length, true); c.setUint32(24, data.length, true); c.setUint16(28, name.length, true); c.setUint32(42, off, true);
+    cdir.push(new Uint8Array(c.buffer), name); off += 30 + name.length + body.length;
+  }
+  const csize = cdir.reduce((a, x) => a + x.length, 0), e = new DataView(new ArrayBuffer(22)); e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, csize, true); e.setUint32(16, off, true);
+  return new Blob([...parts, ...cdir, new Uint8Array(e.buffer)], { type: 'application/zip' });
+}
+async function expBars(api, id, live, maxDays, cap) {
+  const now = Date.now(), out = []; let end = now, empty = 0;
+  for (let page = 0; page < 12 && end > now - maxDays * 864e5 && out.length < cap && !EXP.stop; page++) {
+    let b = [];
+    for (let tryN = 0; tryN < 2; tryN++) { try { b = await api.bars(id, end - 60 * 864e5, end, 5, live, 20000); break; } catch (e) { if (/429|too many/i.test(e.message) && tryN === 0) { EXP.msg = 'Topstep asked to slow down; waiting 30 seconds…'; expRender(); await sleep(30000); } else { b = []; break; } } }
+    await sleep(EXP.gap);
+    if (!b.length) { if (++empty >= 2) break; end -= 60 * 864e5; continue; }
+    empty = 0; out.unshift(...b); end = b[0].t - 1;
+  }
+  return out;
+}
+async function exportData() {
+  if (EXP.busy || !runner || !runner.api) return; EXP.busy = true; EXP.stop = false; EXP.gap = EXP.gap == null ? 700 : EXP.gap;
+  const api = runner.api, live = runner.o.live, files = [], info = [], t0 = Date.now();
+  const list = [{ sym: runner.sym, contract: runner.contract, live }];
+  try {
+    for (const m of (runner.markets ? runner.markets.m : [])) {   // markets not looked up yet are looked up now
+      if (EXP.stop) break; let c = m.contract, lv = m.live;
+      if (!c && m.status !== 'absent') { EXP.msg = 'Looking up ' + m.sym + ' on Topstep…'; expRender(); try { const f = await runner.markets.find(m.sym); if (f) { c = f.c; lv = f.live; } } catch (e) { } }
+      if (c) list.push({ sym: m.sym, contract: c, live: lv });
+    }
+    for (let k = 0; k < list.length && !EXP.stop; k++) {
+      const m = list[k], rows = [], got = [];
+      for (const id of [m.contract.id].concat(olderIds(m.contract.id, 9))) {
+        if (EXP.stop) break; EXP.msg = `Downloading ${m.sym} (${k + 1} of ${list.length}): ${id.split('.').pop()}…`; expRender();
+        const b = await expBars(api, id, m.live, 400, 150000); if (!b.length) continue;
+        got.push({ id, n: b.length, from: new Date(b[0].t).toISOString(), to: new Date(b[b.length - 1].t).toISOString() });
+        for (const x of b) rows.push(id.split('.').pop() + ',' + new Date(x.t).toISOString() + ',' + x.o + ',' + x.h + ',' + x.l + ',' + x.c + ',' + (x.v || 0));
+        if (rows.length > 300000) break;
+      }
+      if (rows.length) files.push({ name: m.sym + '_5min.csv', text: 'contract,time_utc,open,high,low,close,volume\n' + rows.join('\n') + '\n' });
+      info.push({ market: m.sym, name: m.contract.name, description: m.contract.description, tickSize: m.contract.tickSize, tickValue: m.contract.tickValue, contracts: got, rows: rows.length });
+    }
+    let gex = {}; try { if (IS_APP) gex = (await (await fetch('/app/gex/history')).json()).days || {}; } catch (e) { }
+    files.push({ name: 'gex_levels_by_day.json', text: JSON.stringify(gex, null, 1) });
+    files.push({ name: 'levels_typed_or_auto.json', text: JSON.stringify(LV.byDay, null, 1) });
+    files.push({ name: 'markets.json', text: JSON.stringify({ exported: new Date().toISOString(), timezone_note: 'times are UTC; Central Time is UTC-6 in winter, UTC-5 in summer', markets: info }, null, 1) });
+    EXP.msg = 'Packing the file…'; expRender();
+    const blob = await makeZip(files), name = 'topstep-data-' + new Date().toISOString().slice(0, 10) + '.zip';
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 60000);
+    const total = info.reduce((s, x) => s + x.rows, 0);
+    EXP.msg = `Done: ${info.filter(x => x.rows).length} markets, ${total.toLocaleString()} candles, ${(blob.size / 1e6).toFixed(1)} MB, saved to your Downloads folder as ${name}. Send that file to Claude.`; EXP.last = { name, size: blob.size, total, markets: info };
+  } catch (e) { EXP.msg = 'Export stopped: ' + e.message; }
+  finally { EXP.busy = false; expRender(); }
+}
+function expRender() {
+  const el = document.getElementById('expBody'); if (!el) return;
+  el.innerHTML = `<div class="row"><button class="primary" onclick="exportData()" ${EXP.busy || !runner || !runner.sim ? 'disabled' : ''}>${EXP.busy ? 'Exporting…' : 'Export data'}</button>${EXP.busy ? '<button onclick="EXP.stop=true">Stop</button>' : ''}</div><div class="note">${esc(EXP.msg || 'Saves 5-minute candles for every market your account offers, going back as far as Topstep allows (up to about a year), plus the saved GEX levels, into one zip file in your Downloads folder. It takes a few minutes. Your login and account details are not included.')}</div>`;
+}
