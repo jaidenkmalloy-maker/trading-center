@@ -104,14 +104,14 @@ class LiveRunner {
       const now = o.now(), last = this.sim.bars[this.sim.bars.length - 1];
       if (this.streamTick) this.streamTick(now);
       if (now - this.lastBars >= o.barsEvery) { this.lastBars = now; await this.guard(() => this.pollBars()); }
-      const age = this.dataAgeSec(); if (age != null && age > 33 * 60 && !closedHours(now) && now - (this.lastHeal || 0) >= 5 * 60000) { this.lastHeal = now; await this.healFeed(age); }
+      const streamOk = this.streamOk(now), age = this.dataAgeSec(); if (!streamOk && age != null && age > 33 * 60 && !closedHours(now) && now - (this.lastHeal || 0) >= 5 * 60000) { this.lastHeal = now; await this.healFeed(age); }
       if (now - this.lastBal >= o.balEvery) { this.lastBal = now; await this.guard(() => this.pollBalance()); }
       const liveFresh = this.livePriceAt && now - this.livePriceAt < 15000;
       if (!liveFresh && (this.broker.state || this.broker.unmanaged) && now - (this.lastPx || 0) >= 10000) { this.lastPx = now; try { const nb = await this.api.bars(this.contract.id, now - 15 * 60000, now, 1, o.live, 3, true); if (nb.length) { this.livePrice = nb[nb.length - 1].c; this.livePriceAt = now; } } catch (e) { } }
       if (now - this.lastMgr >= o.mgrEvery) { this.lastMgr = now; await this.broker.manage(this.livePrice != null && now - this.livePriceAt < 60000 ? this.livePrice : last.c); }
       if (now - (this.lastSave || 0) >= 60000) this.saveHist();
       if (this.markets && this.o.scanMarkets !== false) { try { this.markets.tick(now); } catch (e) { } }
-      this.sim.audit(now, this.dataAgeSec(), { balAgeSec: this.lastBalOkAt ? (now - this.lastBalOkAt) / 1000 : null });
+      this.sim.audit(now, this.streamOk(now) ? Math.min(this.dataAgeSec() || 0, 60) : this.dataAgeSec(), { balAgeSec: this.lastBalOkAt ? (now - this.lastBalOkAt) / 1000 : null });
       this.lastError = null;
     } catch (e) { this.lastError = e.message; this.broker.err(e.message); }
     finally { this.busy = false; if (this.onChange) this.onChange(); }
@@ -120,6 +120,7 @@ class LiveRunner {
     try { return await fn(); }
     catch (e) { if (e.kind === 'auth' && this.cred) { await this.api.login(this.cred.user, this.cred.key); return fn(); } throw e; }
   }
+  streamOk(now) { const s = this.stream; return !!(s && s.state === 'live' && s.lastTick && (now || this.o.now()) - this.livePriceAt < 120000); }   // live prices are flowing, so the market data is fresh even if the candle history is behind
   dataAgeSec() { const l = this.sim && this.sim.bars[this.sim.bars.length - 1]; return l ? Math.round((this.o.now() - (l.t + this.o.tf * 60000)) / 1000) : null; }
 }
 
