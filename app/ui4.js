@@ -56,18 +56,14 @@ async function kpTest() { if (!KP.topic) { KP.lastRes = 'Press "Make one for me"
 
 // ---- Levels: the daily GEX / IV-wall numbers you copy from TradingView ----
 const LV = { byDay: {}, off: 0, msg: '' };
-try { const s = JSON.parse(localStorage.getItem('ccL_levels') || '{}'); LV.byDay = s.byDay || {}; LV.off = +s.off || 0; } catch (e) { }
+try { const s = JSON.parse(localStorage.getItem('ccL_levels') || '{}'); LV.byDay = s.byDay || {}; LV.off = +s.off || 0; for (const k of Object.keys(LV.byDay)) if (LV.byDay[k] && LV.byDay[k].auto === false) delete LV.byDay[k]; } catch (e) { }   // levels are automatic only now
 const lvSaveStore = () => { try { localStorage.setItem('ccL_levels', JSON.stringify({ byDay: LV.byDay, off: LV.off })); } catch (e) { } };
 const LV_KINDS = [['call', 'Call wall (top)'], ['ivHi', 'IV high (expected-move top)'], ['flip', 'Gamma flip (zero gamma)'], ['ivLo', 'IV low (expected-move bottom)'], ['put', 'Put wall (bottom)']];
 const lvToday = () => ctInfo(Date.now()).day;
-function lvRenderLevels(keepInputs) {
-  const el = document.getElementById('lvlBody'); if (!el) return; if (keepInputs && el.querySelector('input:focus')) return;
-  const day = (el.querySelector('#lvDate') && el.querySelector('#lvDate').value) || lvToday(), cur = LV.byDay[day], n = lvlDays({ levelsByDay: LV.byDay });
-  const val = k => { const l = cur && cur.lv.find(x => x.k === k); return l && cur.raw && cur.raw[k] != null ? cur.raw[k] : ''; };
-  const last = sim && sim.bars && sim.bars.length ? sim.bars[sim.bars.length - 1].c : null;
-  el.innerHTML = gxHtml() + `<div class="form"><label>Trading day<input id="lvDate" type="date" value="${esc(day)}" onchange="lvRenderLevels()"></label>${LV_KINDS.map(([k, n2]) => `<label>${n2}<input id="lv_${k}" type="number" step="0.25" value="${esc(val(k))}" placeholder="optional"></label>`).join('')}<label>Adjust (add to every number)<input id="lvOff" type="number" step="0.25" value="${cur ? cur.off : LV.off}"></label><label>Today's gamma<select id="lvReg"><option value="" ${cur && cur.regime ? '' : 'selected'}>don't know</option><option value="positive" ${cur && cur.regime === 'positive' ? 'selected' : ''}>positive (walls tend to hold)</option><option value="negative" ${cur && cur.regime === 'negative' ? 'selected' : ''}>negative (walls tend to break)</option></select></label></div>
-  <div class="row" style="margin:8px 0"><button class="primary small" onclick="lvSave()">Save these levels</button><button class="small" onclick="lvClear()">Clear this day</button></div>
-  <div class="note"><b id="lvMsgBox">${esc(LV.msg)}</b><br>${last ? 'Last MES price: ' + last.toFixed(2) + '. ' : ''}Days recorded: <b>${n}</b> of ${MIN_LVL_DAYS} needed before the Backtester can test level trades${n >= MIN_LVL_DAYS ? ' (enough now: the Lab will include them)' : ''}. Fill in only the levels your TradingView indicator shows. Use the numbers as they appear on an ES or MES futures chart. If your indicator shows SPX prices instead, type the current difference (ES price minus SPX price) into Adjust. Enter them each morning before the open.</div>`;
+function lvRenderLevels(keepInputs) {   // automatic GEX levels only: nothing to type
+  const el = document.getElementById('lvlBody'); if (!el) return;
+  const n = lvlDays({ levelsByDay: LV.byDay }), last = sim && sim.bars && sim.bars.length ? sim.bars[sim.bars.length - 1].c : null;
+  setHtml('lvlBody', gxHtml() + `<div class="note">${last ? 'Last MES price: ' + last.toFixed(2) + '. ' : ''}Days of GEX levels recorded: <b>${n}</b> of ${MIN_LVL_DAYS} needed before the Backtester can test the GEX strategy on its own history. Levels are taken automatically each trading day from the first good reading after 8:00 CT, as long as the app is running.</div>`);
 }
 function lvMsgShow(m) { LV.msg = m; const e = document.getElementById('lvMsgBox'); if (e) e.textContent = m; }
 function lvSave() {
@@ -122,7 +118,7 @@ function gxBasis(s) {   // MES minus SPX, measured at a moment when both were re
   return null;
 }
 function gxApply(day, s) {
-  if (!s || !s.spot || (s.callWall == null && s.putWall == null)) return false; const cur = LV.byDay[day]; if (cur && !cur.auto) return false;   // never overwrite levels you typed
+  if (!s || !s.spot || (s.callWall == null && s.putWall == null)) return false;
   const off = gxBasis(s); if (off == null) return false;
   const raw = {}, lv = [];
   for (const [k, f] of [['call', 'callWall'], ['put', 'putWall'], ['flip', 'flip'], ['ivHi', 'ivHi'], ['ivLo', 'ivLo']]) if (s[f] > 0) { raw[k] = s[f]; lv.push({ k, p: Math.round((s[f] + off) * 4) / 4 }); }
@@ -155,7 +151,7 @@ function gxHtml() {
   const f = x => x == null ? '-' : x.toFixed(2), td = LV.byDay[GX.today];
   return `<div class="gexbox"><div class="gexhd"><b>Auto GEX</b> <span class="tag ${s.regime === 'positive' ? 'good' : 'bad'}">${s.regime} gamma</span> <span class="mut">free Cboe data, about 15 min delayed, SPX ${f(s.spot)}</span></div>
     <div class="gexrow"><span>Call wall <b>${f(s.callWall)}</b></span><span>IV high <b>${f(s.ivHi)}</b></span><span>Flip <b>${f(s.flip)}</b></span><span>IV low <b>${f(s.ivLo)}</b></span><span>Put wall <b>${f(s.putWall)}</b></span></div>
-    <div class="note">${td && td.auto ? 'Today\'s levels were set automatically from the 8:00 CT reading (shifted ' + (td.off >= 0 ? '+' : '') + td.off + ' to MES prices).' : td ? 'You typed today\'s levels yourself, so the automatic ones are not used today.' : 'Today\'s levels are saved from the first reading after 8:00 CT on trading days.'} Positive gamma tends to calm moves (bounces at walls); negative gamma tends to stretch them.${GX.err ? ' Last refresh failed: ' + esc(GX.err) : ''}</div></div>`;
+    <div class="note">${td && td.auto ? 'Today\'s levels were set automatically from the 8:00 CT reading (shifted ' + (td.off >= 0 ? '+' : '') + td.off + ' to MES prices).' : td ? '' : 'Today\'s levels are saved from the first reading after 8:00 CT on trading days.'} Positive gamma tends to calm moves (bounces at walls); negative gamma tends to stretch them.${GX.err ? ' Last refresh failed: ' + esc(GX.err) : ''}</div></div>`;
 }
 
 // ---- probation lane in the Strategy Lab panel ----
@@ -314,7 +310,7 @@ async function exportLong() {
 function gexModeHtml() {
   const r = runner, on = !!(r && r.sim && r.sim.gexOnly), day = lvToday(), L = LV.byDay[day], R = r && r.sim ? r.sim.rules : null, mode = r && r.broker ? r.broker.o.mode : 'watch';
   const lv = L && L.lv ? L.lv.map(x => ({ call: 'Call wall', put: 'Put wall', flip: 'Flip', ivHi: 'IV high', ivLo: 'IV low' }[x.k] + ' ' + x.p)).join(' · ') : 'no levels yet for today';
-  const reg = L && L.regime ? L.regime + (L.auto ? '' : ' (you set it)') : (L ? 'unknown (typed by hand)' : '-'), trading = !(L && L.regime === 'negative');
+  const reg = L && L.regime ? L.regime : (L ? 'unknown' : 'waiting for today\'s reading'), trading = !(L && L.regime === 'negative');
   let h = `<div class="row"><button class="${on ? '' : 'primary'}" onclick="gexToggle()">${on ? 'Turn GEX mode off' : 'Turn GEX mode on'}</button><span class="pill ${on ? 'ok' : ''}">${on ? 'ON' : 'OFF'}</span></div>`;
   h += `<div class="gmrow"><div><span class="mut">Today's gamma</span><b class="${/^positive/.test(reg) ? 'pos' : /^negative/.test(reg) ? 'neg' : ''}">${esc(reg)}</b></div><div><span class="mut">Trades today</span><b>${R ? R.nToday : 0} of ${on ? 2 : (r && r.sim ? r.sim.c.maxTradesPerDay : '-')}</b></div><div><span class="mut">Size</span><b>${on ? '1 contract' : '-'}</b></div><div><span class="mut">Orders go to Topstep</span><b class="${mode === 'auto' || mode === 'confirm' ? 'pos' : 'neg'}">${mode === 'auto' ? 'yes, automatically' : mode === 'confirm' ? 'after you approve' : 'no (' + esc(MODE_TXT[mode] || mode) + ')'}</b></div></div>`;
   h += `<div class="note">Levels in MES prices: ${esc(lv)}.<br>${on ? (trading ? 'Positive (or unknown) gamma: it buys a bounce off the put wall or IV low and sells a rejection at the call wall or IV high (and either side of the flip), each level at most once a day.' : 'Negative gamma today: walls tend to break, so it trades the break instead: it sells when a 15-minute candle closes below the put wall or IV low, and buys when one closes above the call wall or IV high. Each wall at most once today.') + (mode === 'auto' || mode === 'confirm' ? '' : ' <b>To send real orders, choose Automatic (or Confirm) in Executor control below.</b>') : 'When on: only the GEX strategy trades, 1 contract, at most 2 trades a day: bounces at the walls on positive-gamma days, breaks through them on negative-gamma days. Other markets and Strategy Lab changes are paused. Your loss limits stay in force.'}</div>`;

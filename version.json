@@ -1,8 +1,8 @@
 {
-  "version": "1.9.1",
-  "notes": "Ignore empty Cboe readings; set today's gamma when typing levels",
+  "version": "1.9.2",
+  "notes": "Levels are automatic only",
   "files": {
-    "app/index.html": "ec28f2796f84eb93236260369543e5aba127a85bb60ccee38a8b8408fe33ee72",
+    "app/index.html": "71723465411034e9032d2cb4e1685f5b183bf4378fb6f7767d62ec96d99c41b0",
     "app/style.css": "996f21d16b7df16734f51d4aa8f916c8694fff2d824fbe53389d7313c2eb3034",
     "app/restore.js": "4073d4f455edcb3863eb796136ec867adc56c1c87cfc99817fa787b3783191bf",
     "app/engine1.js": "0d69881d91c4b1b1672e65d6e374786c8e853f78c425335e52f1e14072689611",
@@ -16,7 +16,7 @@
     "app/ui1.js": "750aa8fc5991050aab8ff9b98397c9d655be539cc8ddd15157a2309d20e0251c",
     "app/ui2.js": "98eee27c832f1410a2d0ebe8bc9372a214431024878f35f7a676f461e04b9761",
     "app/ui3.js": "38156398192f5e39a362d69d879ed06c2f45cd54989c1cd1fb1d7b965a9eaad1",
-    "app/ui4.js": "1eccab45d92bef505cd485253e3ccf694935b16f6a8e15af373cafe942dc7264",
+    "app/ui4.js": "33a26d5af8dcdd2f572eec3591138dafbb76f1396c235660c7151d326715c575",
     "server.js": "a3ddbdd16a73852ae75f018b10dd1afd10871f192293141b3b7cbcaa893b75b2",
     "gex.js": "994ab5a2aecf75ce9cfd5b77ea69b3ee42a94933ae7550c4e4504349cad8c6ab"
   }
