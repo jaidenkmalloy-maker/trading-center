@@ -103,10 +103,12 @@ function labRender() {
     h += `<div class="note">${esc(lr.caution)}</div>`;
   } else h += '<div class="empty">Has not run yet. It needs about 1,500 candles.</div>';
   if (L.history.length) h += `<div class="note">History: ${L.history.slice(0, 4).map(x => x.applied ? 'applied ' + (x.to.length ? x.to.length + ' strategies' : 'none') : 'ran, ' + (x.approved.length || 'no') + ' approved').join(' · ')}</div>`;
+  if (live && runner.probation) h += probHtml();
   setHtml('labBody', h);
 }
 function labRun() {
   const L = curLab(); L.run({ onProgress: p => { if (Math.round(p * 50) % 5 === 0) labRender(); } }).then(res => {
+    if (res && live_() && runner.probation) runner.probation.consider(res);
     if (res && res.change && live_() && runner.o.learnMode === 'auto' && !runner.broker.busy()) L.apply(() => { }); labRender(); if (live_()) lvRender(); render();
   }); labRender();
 }

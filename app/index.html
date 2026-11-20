@@ -7,18 +7,11 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="shell"><aside class="side"><div class="brand"><i></i>Control Center</div><a href="#kpis" data-sec="kpis"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Overview</a><a href="#liveWrap" data-sec="liveWrap"><svg viewBox="0 0 24 24"><path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/></svg>Live (Topstep)</a><a href="#systems" data-sec="systems"><svg viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg>Systems</a><a href="#chartSec" data-sec="chartSec"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 4-6"/></svg>Chart & ticket</a><a href="#labPanel" data-sec="labPanel"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></svg>Strategy Lab</a><a href="#chatSec" data-sec="chatSec"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Talk to the systems</a><a href="#actSec" data-sec="actSec"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Activity</a><a href="#dataBox" data-sec="dataBox"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Data & settings</a><div class="sfoot" id="sideFoot">Topstep 50K Combine</div></aside><div class="maincol">
+<div class="shell"><aside class="side"><div class="brand"><i></i>Control Center</div><a href="#kpis" data-sec="kpis"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Overview</a><a href="#liveWrap" data-sec="liveWrap"><svg viewBox="0 0 24 24"><path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/></svg>Live (Topstep)</a><a href="#systems" data-sec="systems"><svg viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg>Systems</a><a href="#chartSec" data-sec="chartSec"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 4-6"/></svg>Chart & ticket</a><a href="#labPanel" data-sec="labPanel"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></svg>Strategy Lab</a><a href="#chatSec" data-sec="chatSec"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Talk to the systems</a><a href="#actSec" data-sec="actSec"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Activity</a><a href="#setBox" data-sec="setBox"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Settings</a><div class="sfoot" id="sideFoot">Topstep 50K Combine</div></aside><div class="maincol">
 <header>
-  <div class="row"><h1>Trading Control Center</h1><span class="row tabs" style="gap:0"><button id="tabReplay" class="small primary" onclick="setView('replay')">Replay</button><button id="tabLive" class="small" onclick="setView('live')">Live (Topstep)</button></span><span id="src" class="pill"></span><span id="overall" class="pill"></span><span id="appVer" class="pill" style="display:none"></span></div>
+  <div class="row"><h1>Trading Control Center</h1><span class="row tabs" style="display:none"><button id="tabReplay"></button><button id="tabLive"></button></span><span id="src" class="pill"></span><span id="overall" class="pill"></span><span id="appVer" class="pill" style="display:none"></span></div>
   <div class="row">
-    <span class="row" id="replayBtns">
-    <button id="bPlay" class="primary" onclick="togglePlay()">Play</button>
-    <button onclick="stepN(1)">Step</button>
-    <button onclick="stepN(50)">+50</button>
-    <button onclick="runEnd()">Run to end</button>
-    <button onclick="doReset()">Restart</button>
-    <select id="speed" onchange="setSpeed(this.value)"><option value="5">Slow</option><option value="20" selected>Normal</option><option value="60">Fast</option><option value="200">Very fast</option></select>
-    </span>
+    <span id="replayBtns" style="display:none"><button id="bPlay"></button></span>
     <button id="bKill" class="danger" onclick="toggleKill()">Kill switch</button>
   </div>
 </header>
@@ -55,9 +48,9 @@
   <section class="systems" id="systems"></section>
   <div class="grid" id="chartSec">
     <div class="panel"><h2>Chart <small id="chartNote"></small></h2><div id="chart"></div>
-      <div class="legend">Amber band = fib entry zone for the active setup &middot; red dotted = stop level &middot; &#9670; setup found &middot; &#9650;/&#9660; entry &middot; &#9679; exit</div></div>
+      <div class="legend">&#9670; setup found &middot; &#9650;/&#9660; entry &middot; &#9679; exit &middot; red dotted = stop level</div></div>
     <div>
-      <div class="panel" style="margin-bottom:14px"><h2>Order ticket <small id="tkSub">to place by hand in TopstepX</small></h2><div id="ticket"></div></div>
+      <div class="panel" style="margin-bottom:14px"><h2>Next trade <small id="tkSub">what the bot would place</small></h2><div id="ticket"></div></div>
       <div class="panel"><h2>Rules Manager <small>numbers to watch</small></h2><div id="gauges"></div></div>
     </div>
   </div>
@@ -77,20 +70,8 @@
     <div class="panel"><h2>Performance Manager <small>all systems together</small></h2><div id="perf"></div></div>
     <div class="panel"><h2>Backtester detail <small>past outcomes of the same setup</small></h2><div id="bt"></div></div>
   </div>
-  <details open id="dataBox"><summary>Data</summary><div class="panel"><div class="row">
-    <button onclick="newRandom()">New random data</button>
-    <label class="row" style="gap:6px">Load your candles (CSV)<input type="file" accept=".csv,text/csv" onchange="loadCsv(event)"></label>
-  </div>
-  <div class="row" style="margin-top:10px;gap:10px;align-items:flex-end;flex-wrap:wrap">
-    <label>Chart picture (PNG)<input type="file" accept="image/png,image/jpeg" onchange="loadPng(event)"></label>
-    <label>Price of the highest wick<input id="pngHigh" type="number" step="any" style="width:110px"></label>
-    <label>Price of the lowest wick<input id="pngLow" type="number" step="any" style="width:110px"></label>
-    <label>Minutes per candle<input id="pngTf" type="number" value="15" style="width:70px"></label>
-    <label>Last candle's open time (Central)<input id="pngTime" type="text" placeholder="2026-11-19 11:00" style="width:150px"></label>
-  </div>
-  <div class="note">Picture reading is approximate. Crop the screenshot to just the candles (no price labels, icons or tags), red and green candles on a dark background. Hover over the highest and lowest wick on your chart to read their prices, and over the last candle for its time. Fill in the four boxes first, then choose the file. Each price can be off by a few ticks, and the picture holds only a screen of candles, so the backtester will not have enough history to approve trades. Use it to see what the scanner flags; for real testing load a CSV.</div>
-  <div class="note">CSV columns: time, open, high, low, close (15-minute candles, e.g. exported from TradingView). Times without a time zone are read as Central Time. Everything runs inside this page; nothing is uploaded.</div></div></details>
-  <details><summary>Settings (changing one restarts the replay)</summary><div class="panel"><div class="form" id="settings"></div>
+  <details id="dataBox" style="display:none"></details>
+  <details id="setBox"><summary>Settings</summary><div class="panel"><div class="form" id="settings"></div>
     <div class="row" style="margin-top:10px"><button onclick="resetSettings()">Restore defaults</button></div>
     <div class="note">Topstep numbers here are my understanding of a 50K Combine. Topstep changes its rules often, so check each one against your own account before trusting a result.</div></div></details>
 </main>

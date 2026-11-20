@@ -215,6 +215,7 @@ class Lab {
   }
   apply(extra) {
     const p = this.proposal; if (!p) return false; const list = p.approved.map(a => ({ id: a.id, params: a.params, key: a.key, label: a.label }));
+    for (const s of this.sim.promoted || []) if (!list.some(x => x.key === s.key)) list.push(s);   // strategies that earned their place on probation stay
     this.sim.setStrategies(list); this.proposal = null; this.history.unshift({ at: Date.now(), applied: true, to: list.map(s => s.label) });
     this.sim.note(Math.max(0, this.sim.i - 1), 'backtester', 'approve', list.length ? 'Strategies now in use: ' + list.map(s => s.label).join('; ') : 'No strategy approved: the Scanner is standing down.', list.length > 0);
     if (extra) extra(list); return true;
@@ -228,4 +229,54 @@ function mtfView(bars, n) {   // what the 15m, 1h, 4h and daily charts are doing
   if (_mv.n !== n) { _mv.ind.upto(n); _mv.n = n; const I = _mv.ind, k = n - 1, c = bars[k].c, e = I.e20[k], e0 = I.e20[Math.max(0, k - 5)];
     _mv.r = { m15: c > e && e > e0 ? 1 : c < e && e < e0 ? -1 : 0, h1: I.trend(60), h4: I.trend(240), d1: I.trend(1440) }; }
   return _mv.r;
+}
+
+// ---- Probation: strategies that came close in the Lab paper-trade live; only trades after they joined count ----
+const PROB = { promoteN: 20, dropN: 15, maxNear: 4 };
+class Probation {
+  constructor(sim, store, key) { this.sim = sim; this.store = store || null; this.key = key || 'probation'; this.list = []; this.cache = null; this.promoted = []; try { const j = store && store.get(this.key); if (j) { const o = JSON.parse(j); this.list = o.list || []; this.promoted = o.promoted || []; } } catch (e) { } sim.promoted = this.promoted; sim.promotedOut = k => { this.promoted = this.promoted.filter(x => x.key !== k); sim.promoted = this.promoted; this.save(); }; this.ensureLevels(); }
+  save() { try { if (this.store) this.store.set(this.key, JSON.stringify({ list: this.list, promoted: this.promoted })); } catch (e) { } this.cache = null; }
+  now() { const b = this.sim.bars; return b.length ? b[b.length - 1].t : Date.now(); }
+  ensureLevels() {   // the GEX level strategy has no history to judge, so it is always on probation (needs levels to trade)
+    if (!this.list.some(p => p.id === 'lvl')) { const p = { k: 1, m: 2, use: 'all', mtf: 0 }; this.list.push({ id: 'lvl', params: p, key: stratKey('lvl', p), label: stratLabel('lvl', p), since: this.now(), why: 'GEX levels: judged on live days only', lab: null, always: true }); this.save(); }
+  }
+  consider(lr) {   // after each Lab run: add near-misses (profitable in the Lab but not proven), never the approved ones
+    if (!lr || !lr.rows) return [];
+    const approved = new Set((lr.approved || []).map(a => a.key)), have = new Set(this.list.map(p => p.key)), added = [];
+    const near = lr.rows.filter(r => !r.ok && !approved.has(r.key) && r.selN >= 30 && r.exp > 0 && r.t >= 1.5 && (r.holdExp == null || r.holdExp > -Math.abs(r.exp)))
+      .sort((a, b) => b.t - a.t);
+    const perId = {}; for (const r of near) { if (perId[r.id]) continue; perId[r.id] = r; }
+    for (const r of Object.values(perId)) {
+      if (this.list.filter(p => !p.always).length >= PROB.maxNear) break;
+      if (have.has(r.key) || this.list.some(p => p.id === r.id)) continue;
+      const e = { id: r.id, params: r.params, key: r.key, label: r.label, since: this.now(), why: r.why, lab: { exp: r.exp, pTP: r.pTP, n: r.selN, t: r.t } };
+      this.list.push(e); added.push(e);
+    }
+    for (const p of this.list) if (approved.has(p.key)) p.done = 'approved by the Lab';
+    this.list = this.list.filter(p => !p.done); if (added.length) this.save();
+    return added;
+  }
+  rows() {   // live paper results since each strategy joined (cached per candle)
+    const b = this.sim.bars, c = this.sim.c, n = b.length, lev = c.levelsByDay ? Object.keys(c.levelsByDay).length : 0;
+    if (this.cache && this.cache.n === n && this.cache.lev === lev && this.cache.len === this.list.length) return this.cache.rows;
+    const rows = this.list.map(p => {
+      const start = b.findIndex(x => x.t > p.since); let tr = [];
+      if (start >= 0) { const from = Math.max(0, start - 400), part = b.slice(from); tr = labTrades(part, c, { id: p.id, params: p.params, key: p.key }).filter(t => t.sigI + from >= start).map(t => Object.assign({}, t, { sigI: t.sigI + from, entryI: t.entryI + from, exitI: t.exitI + from })); }
+      const N = tr.length, exp = N ? tr.reduce((a, t) => a + t.pnl1, 0) / N : null, pTP = N ? tr.filter(t => t.reason === 'tp').length / N : null;
+      let status, verdict;
+      if (N >= PROB.promoteN && exp > 0 && (!p.lab || pTP >= Math.min(p.lab.pTP - 0.1, c.minTP != null ? c.minTP : 0.5))) { status = 'ready'; verdict = `Held up live: ${N} trades, ${usd(exp)} per contract. Ready to use.`; }
+      else if (N >= PROB.dropN && !(exp > 0)) { status = 'failed'; verdict = `Lost money live (${usd(exp)} per contract over ${N} trades).`; }
+      else { status = 'testing'; verdict = N ? `${N} of ${PROB.promoteN} live trades so far` : (p.id === 'lvl' && !lev ? 'waiting for GEX levels' : 'waiting for its first live setup'); }
+      return Object.assign({}, p, { n: N, exp, pTP, net: N ? tr.reduce((a, t) => a + t.pnl1, 0) : 0, status, verdict, trades: tr });
+    });
+    this.cache = { n, lev, len: this.list.length, rows }; return rows;
+  }
+  drop(key) { const p = this.list.find(x => x.key === key); if (!p) return false; if (p.always) { p.since = this.now(); p.reset = true; } else this.list = this.list.filter(x => x.key !== key); this.save(); return true; }
+  promote(key) {   // add to the strategies the Scanner uses (keeps any already approved)
+    const r = this.rows().find(x => x.key === key); if (!r || r.status !== 'ready') return false;
+    const s0 = { id: r.id, params: r.params, key: r.key, label: r.label }, cur = (this.sim.c.strategies || []).slice(); if (!cur.some(s => s.key === r.key)) cur.push(s0);
+    if (!this.promoted.some(x => x.key === r.key)) this.promoted.push(s0); this.sim.promoted = this.promoted;
+    this.sim.setStrategies(cur); this.sim.note(Math.max(0, this.sim.i - 1), 'backtester', 'approve', 'Promoted from probation after holding up live: ' + r.label, true);
+    if (!r.always) this.list = this.list.filter(x => x.key !== key); this.save(); return true;
+  }
 }

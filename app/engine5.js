@@ -98,6 +98,7 @@ class LiveSim extends Sim {
     if (this.counts.approved > before && this.ticket && this.broker) this.broker.request(Object.assign({}, this.ticket), sig, i);
   }
   dropStrategy(s, why) {
+    if (this.promotedOut) this.promotedOut(s.key || stratKey(s.id, s.params));
     const key = s.key || stratKey(s.id, s.params); this.setStrategies((this.c.strategies || []).filter(x => (x.key || stratKey(x.id, x.params)) !== key));
     this.note(Math.max(0, this.i - 1), 'performance', 'pause', `Performance Manager switched off ${s.label || stratLabel(s.id, s.params)}: ${why}`, false);
     (this.dropped = this.dropped || []).push({ key, why, at: this.bars.length }); if (this.onStrategies) this.onStrategies(this.c.strategies);

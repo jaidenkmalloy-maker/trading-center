@@ -38,7 +38,7 @@ class LiveRunner {
     for (const k of Object.keys(cfg)) if (cfg[k] === undefined) delete cfg[k];
     if (!Array.isArray(cfg.strategies)) cfg.strategies = [];     // live: trade only what the Backtester approves
     this.sim = new LiveSim(bars, cfg); this.broker = new Broker(this.api, this.sim, { mode: 'watch', accountId, contract, tf: o.tf, now: o.now });
-    this.sim.initAccount(this.account.balance); this.learner = new Lab(this.sim); this.sim.lab = this.learner; this.sim.onStrategies = l => this.onLearned && this.onLearned({ strategies: l }); this.status = 'running'; this.lastBars = this.lastMgr = this.lastBal = now;
+    this.sim.initAccount(this.account.balance); this.learner = new Lab(this.sim); this.sim.lab = this.learner; this.probation = new Probation(this.sim, this.o.store, 'probation_' + contract.id); if (this.probation.promoted.length) this.sim.setStrategies(this.probation.promoted.slice()); this.sim.onStrategies = l => this.onLearned && this.onLearned({ strategies: l }); this.status = 'running'; this.lastBars = this.lastMgr = this.lastBal = now;
     this.sim.note(this.sim.i - 1, 'scanner', 'info', `Live data loaded: ${bars.length} candles (${stored ? 'stored history plus new' : 'fresh download'}). Contract ${contract.name}, tick ${contract.tickSize}, $${(contract.tickValue / contract.tickSize).toFixed(2)} per point.`, true);
     return this.sim;
   }
@@ -52,7 +52,7 @@ class LiveRunner {
   async pollBalance() { const acc = (await this.api.accounts()).find(a => a.id === this.account.id); if (acc) { this.account = acc; this.lastBalOkAt = this.o.now(); this.sim.syncBalance(acc.balance); if (acc.canTrade === false) this.broker.alert('Topstep says this account can no longer trade.'); } }
   maybeLearn() {
     if (this.barsSinceLearn < 96 || this.learner.running) return; this.barsSinceLearn = 0;
-    this.learner.run().then(r => { if (r && r.change && this.o.learnMode === 'auto' && !this.broker.busy()) this.learner.apply(l => this.onLearned && this.onLearned({ strategies: l })); if (this.onChange) this.onChange(); }).catch(e => { this.lastError = 'Learning failed: ' + e.message; });
+    this.learner.run().then(r => { if (r && this.probation) { const add = this.probation.consider(r); if (add.length) this.sim.note(Math.max(0, this.sim.i - 1), 'backtester', 'probation', 'On probation (paper trading live, no real orders): ' + add.map(a => a.label).join('; '), null); } if (r && r.change && this.o.learnMode === 'auto' && !this.broker.busy()) this.learner.apply(l => this.onLearned && this.onLearned({ strategies: l })); if (this.onChange) this.onChange(); }).catch(e => { this.lastError = 'Learning failed: ' + e.message; });
   }
   async tick() {
     if (this.busy || !this.sim) return; this.busy = true; const o = this.o;

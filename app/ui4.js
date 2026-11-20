@@ -30,7 +30,7 @@ function keepTicker(fn, ms) {   // a background worker drives the ticks, so the 
   return { stop() { if (w) w.terminate(); if (iv) clearInterval(iv); } };
 }
 function kpStartLive(r) {
-  r.broker.onLog = kpFromBroker; r.sim.onNote = kpFromNote; kpWake(); setTimeout(() => gxSync(false), 500);
+  r.broker.onLog = kpFromBroker; r.sim.onNote = kpFromNote; kpWake(); syncOffline(); setTimeout(() => gxSync(false), 500);
   return keepTicker(() => { r.tick(); kpWatch(); if (IS_APP && Date.now() - GX.syncedAt > 15 * 60000) gxSync(false); }, 3000);
 }
 function kpRender() {
@@ -147,3 +147,22 @@ function gxHtml() {
     <div class="gexrow"><span>Call wall <b>${f(s.callWall)}</b></span><span>IV high <b>${f(s.ivHi)}</b></span><span>Flip <b>${f(s.flip)}</b></span><span>IV low <b>${f(s.ivLo)}</b></span><span>Put wall <b>${f(s.putWall)}</b></span></div>
     <div class="note">${td && td.auto ? 'Today\'s levels were set automatically from the 8:00 CT reading (shifted ' + (td.off >= 0 ? '+' : '') + td.off + ' to MES prices).' : td ? 'You typed today\'s levels yourself, so the automatic ones are not used today.' : 'Today\'s levels are saved from the first reading after 8:00 CT on trading days.'} Positive gamma tends to calm moves (bounces at walls); negative gamma tends to stretch them.${GX.err ? ' Last refresh failed: ' + esc(GX.err) : ''}</div></div>`;
 }
+
+// ---- probation lane in the Strategy Lab panel ----
+function probHtml() {
+  const P = runner.probation, rows = P.rows(), f = x => x == null ? '-' : x;
+  let h = `<h3 class="subh">On probation <small>paper trading live, no real orders. Only setups after a strategy joined count. It needs ${PROB.promoteN} live trades that make money to be promoted.</small></h3>`;
+  if (!rows.length) return h + '<div class="empty">Nothing on probation yet. Strategies that come close in the Lab are added here.</div>';
+  h += `<table class="nw"><thead><tr><th>Strategy</th><th>Joined</th><th>Live trades</th><th>Hit TP</th><th>Per contract</th><th>In the Lab</th><th>Status</th><th></th></tr></thead><tbody>`;
+  for (const r of rows) {
+    const bar = Math.min(1, r.n / PROB.promoteN), col = r.status === 'ready' ? '#3ee6b0' : r.status === 'failed' ? '#f27272' : '#2bb7d6';
+    h += `<tr><td style="white-space:normal;min-width:180px">${esc(r.label)}</td><td>${esc(fmtT(r.since).slice(0, 10))}</td><td><div class="pbar"><i style="width:${(bar * 100).toFixed(0)}%;background:${col}"></i></div>${r.n} / ${PROB.promoteN}</td><td>${r.pTP == null ? '-' : pct(r.pTP)}</td><td class="${cls(r.exp || 0)}">${r.exp == null ? '-' : usd(r.exp)}</td><td class="mut">${r.lab ? usd(r.lab.exp) + ', ' + pct(r.lab.pTP) + ' TP' : 'no history'}</td><td style="white-space:normal;min-width:200px" class="vd ${r.status === 'ready' ? 'ok' : 'no'}">${esc(r.verdict)}</td><td>${r.status === 'ready' ? `<button class="small primary" onclick="probUse('${esc(r.key)}')">Use it</button> ` : ''}<button class="small" onclick="probDrop('${esc(r.key)}')">${r.always ? 'Restart' : 'Remove'}</button></td></tr>`;
+  }
+  return h + '</tbody></table>';
+}
+function probUse(key) { if (runner && runner.probation && runner.probation.promote(key)) { lvRender(); labRender(); render(); } }
+function probDrop(key) { if (runner && runner.probation && runner.probation.drop(key)) labRender(); }
+
+// ---- the app opens straight to Live; the dashboard appears once connected ----
+function syncOffline() { try { document.body.classList.toggle('offline', !(isLive() && runner && runner.sim && runner.sim === sim)); } catch (e) { } }
+if (typeof document !== 'undefined') { try { setView('live'); } catch (e) { } syncOffline(); }

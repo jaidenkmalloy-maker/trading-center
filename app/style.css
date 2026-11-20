@@ -122,3 +122,8 @@ section,.panel,.sys,.kpi{animation:fadein .5s ease both}@keyframes fadein{from{o
 .gexbox{background:#ffffff04;border:1px solid #ffffff0a;border-radius:14px;padding:10px 12px;margin-bottom:12px}.gexhd{margin-bottom:6px}.gexrow{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--muted)}.gexrow b{color:var(--text);font-weight:500}
 svg text{fill:#7f8d87}
 main [id]{scroll-margin-top:120px}
+main{display:flex;flex-direction:column}main>*{min-width:0}#appBanner,#banners,#kpis,#where,main>.prog{order:-2}#systems{order:-1}
+body:not(.offline) #connForm+#connStep2+details,body:not(.offline) #liveWrap>.panel:first-child>.note{display:none}
+body.offline #kpis,body.offline #systems,body.offline #chartSec,body.offline #labPanel,body.offline #chatSec,body.offline #actSec,body.offline .grid3,body.offline #where,body.offline .prog,body.offline #banners{display:none!important}
+.subh{font-size:13px;font-weight:600;margin:18px 0 8px}.subh small{font-weight:400;color:var(--muted);margin-left:6px}
+.pbar{width:70px;height:5px;border-radius:3px;background:#ffffff10;overflow:hidden;margin-bottom:3px}.pbar i{display:block;height:100%;border-radius:3px;box-shadow:0 0 8px currentColor}
