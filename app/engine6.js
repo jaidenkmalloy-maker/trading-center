@@ -58,6 +58,7 @@ class LiveRunner {
     lines.push(su.length ? `Setups found: ${su.length}. Not taken: ${skipped.length}${skipped.length ? ' (' + Object.entries(why).map(([k, v]) => k + (v > 1 ? ' x' + v : '')).join(', ') + ')' : ''}.` : 'Setups found: none.');
     const L = lvByDay || {}, rec = days.filter(d => L[d] && L[d].lv && L[d].lv.length), pos = rec.filter(d => L[d].regime === 'positive').length, neg = rec.filter(d => L[d].regime === 'negative').length;
     lines.push(`Gamma: ${pos} positive day${pos === 1 ? '' : 's'}, ${neg} negative. GEX levels saved for ${rec.length} of 5 days.`);
+    const ox = days.find(d => opexInfo(d).opex); if (ox) lines.push(`${opexInfo(ox).quarterly ? 'Quarterly' : 'Monthly'} options expiration was ${wd(ox)}: many options expired, so expect the walls to move to new strikes next week.`);
     if (S && isFinite(S.lastBal)) lines.push(`Account balance about $${Math.round(S.lastBal).toLocaleString('en-US')}.`);
     return { key: days[0], title: 'Weekly report', text: lines.join('\n') };
   }
@@ -115,7 +116,7 @@ class LiveRunner {
     const S = this.sim, c = S.c, st = this.o.store; let saved = {}; try { saved = JSON.parse(st.get('gexonly') || '{}'); } catch (e) { }
     if (on) {
       const prev = saved.on ? saved.prev : { maxContracts: c.maxContracts, maxTradesPerDay: c.maxTradesPerDay, gate: c.gate, learnMode: this.o.learnMode };
-      const p = { k: 1, m: 2, use: 'all', mtf: 0, posOnly: 1, negBreak: 1 }, g = { id: 'lvl', params: p, key: stratKey('lvl', p), label: 'GEX levels: bounce at the walls on positive-gamma days, trade breaks on negative-gamma days' };
+      const p = { k: 1, m: 2, use: 'all', mtf: 0, posOnly: 1, negBreak: 1, flipBand: 0.2, tgtLvl: 1 }, g = { id: 'lvl', params: p, key: stratKey('lvl', p), label: 'GEX levels: bounce at the walls on positive-gamma days, trade breaks on negative-gamma days; stand aside near the flip' };
       c.maxContracts = 1; c.maxTradesPerDay = 2; c.gate = 'off'; this.o.learnMode = 'off'; this.o.scanMarkets = false; S.gexOnly = true;
       S.setStrategies([g]); st.set('gexonly', JSON.stringify({ on: true, prev }));
       S.note(Math.max(0, S.i - 1), 'scanner', 'mode', 'GEX-only mode on: trading only the GEX levels, 1 contract, at most 2 trades a day (bounces on positive-gamma days, breaks on negative-gamma days).', true);

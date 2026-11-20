@@ -41,6 +41,11 @@ function ctInfo(ms) {
   if (mins >= 1020) day = new Date(Date.UTC(+p.year, +p.month - 1, +p.day) + 864e5).toISOString().slice(0, 10);
   return { date, mins, day, dow: p.weekday };
 }
+function opexInfo(day) {   // monthly options expiration is the third Friday; the trading day after it often has new walls
+  const d = new Date(day + 'T12:00:00Z'), dow = d.getUTCDay(), dom = d.getUTCDate(), m = d.getUTCMonth() + 1;
+  const opex = dow === 5 && dom >= 15 && dom <= 21, after = dow === 1 && dom >= 18 && dom <= 24;
+  return { opex, quarterly: opex && m % 3 === 0, after };
+}
 function annotate(bars) { for (const b of bars) { const c = ctInfo(b.t); b.mins = c.mins; b.day = c.day; } return bars; }
 const inFlat = (mins, c) => mins >= hm(c.flatTime) && mins < 1020;
 const canEnter = (mins, c) => !(mins >= hm(c.entryCutoff) && mins < 1020);

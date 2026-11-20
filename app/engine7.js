@@ -53,6 +53,8 @@ class LvlStrat {   // trades the bounce or rejection at the daily option levels 
     const bar = this.b[i], c = this.c, p = this.p, L = c.levelsByDay && c.levelsByDay[bar.day];
     if (bar.day !== this.day) { this.day = bar.day; this.fired = {}; }
     if (!L || !L.lv || !L.lv.length || i < 30 || !winOk(bar, c)) return null;
+    const fl = p.flipBand ? L.lv.find(l => l.k === 'flip' && +l.p > 0) : null;
+    if (fl && Math.abs(bar.c - fl.p) < bar.c * p.flipBand / 100) return null;   // near the gamma flip the market has not picked calm or wild: stand aside
     if (L.regime === 'negative' && p.negBreak) {   // negative gamma: walls tend to break, so trade the break instead of the bounce
       const atr = this.ind.atr[i], pc = i > 0 ? this.b[i - 1].c : bar.o;
       for (const l of L.lv) {
@@ -65,12 +67,18 @@ class LvlStrat {   // trades the bounce or rejection at the daily option levels 
     if (p.posOnly && L.regime === 'negative') return null;   // walls hold best when dealers are long gamma
     const atr = this.ind.atr[i], tol = 0.15 * atr;
     for (const l of L.lv) {
-      const P = +l.p; if (!(P > 0) || this.fired[l.k]) continue; if (p.use === 'walls' && l.k !== 'put' && l.k !== 'call') continue;
+      const P = +l.p; if (!(P > 0) || this.fired[l.k]) continue; if (p.use === 'walls' && l.k !== 'put' && l.k !== 'call') continue; if (p.flipBand && l.k === 'flip') continue;
       const sup = l.k === 'put' || l.k === 'ivLo' || (l.k === 'flip' && bar.c > P), res = l.k === 'call' || l.k === 'ivHi' || (l.k === 'flip' && bar.c < P);
-      if (sup && bar.l <= P + tol && bar.c > P && bar.c > bar.o) { this.fired[l.k] = 1; const stop = Math.min(bar.l, P) - p.k * atr, s = mkSig(c, i, bar, 'long', stop, bar.c + p.m * (bar.c - stop), { level: l.k }); if (s) return s; }
-      if (res && bar.h >= P - tol && bar.c < P && bar.c < bar.o) { this.fired[l.k] = 1; const stop = Math.max(bar.h, P) + p.k * atr, s = mkSig(c, i, bar, 'short', stop, bar.c - p.m * (stop - bar.c), { level: l.k }); if (s) return s; }
+      if (sup && bar.l <= P + tol && bar.c > P && bar.c > bar.o) { const stop = Math.min(bar.l, P) - p.k * atr, tg = this.tgt(L, bar, 'long', bar.c - stop); if (tg == null) continue; this.fired[l.k] = 1; const s = mkSig(c, i, bar, 'long', stop, tg, { level: l.k }); if (s) return s; }
+      if (res && bar.h >= P - tol && bar.c < P && bar.c < bar.o) { const stop = Math.max(bar.h, P) + p.k * atr, tg = this.tgt(L, bar, 'short', stop - bar.c); if (tg == null) continue; this.fired[l.k] = 1; const s = mkSig(c, i, bar, 'short', stop, tg, { level: l.k }); if (s) return s; }
     }
     return null;
+  }
+  tgt(L, bar, dir, risk) {   // calm days: aim for 2R, but no further than the next level in the way (it tends to stop the move); skip if that leaves less than 1R
+    const p = this.p, full = dir === 'long' ? bar.c + p.m * risk : bar.c - p.m * risk; if (!p.tgtLvl) return full;
+    const T = this.c.tick, nx = L.lv.map(l => +l.p).filter(x => x > 0 && (dir === 'long' ? x > bar.c + 4 * T : x < bar.c - 4 * T));
+    if (!nx.length) return full; const n = dir === 'long' ? Math.min(...nx) - T : Math.max(...nx) + T;
+    const tg = dir === 'long' ? Math.min(full, n) : Math.max(full, n); return Math.abs(tg - bar.c) >= risk ? tg : null;
   }
 }
 class KeyLvlStrat {   // bounce / rejection at yesterday's high-low and the overnight high-low (levels with full history, so the Lab can test the idea today)
