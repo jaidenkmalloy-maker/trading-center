@@ -35,6 +35,9 @@ class TopstepAPI {
     if (!j.success || j.errorCode || !j.token) throw new Error(LOGIN_ERR[j.errorCode] || j.errorMessage || ('Login failed (code ' + j.errorCode + ')'));
     this.token = j.token; this.tokenAt = Date.now(); return true;
   }
+  async validate() {   // refresh the current session without starting a new one (a new sign-in logs you out of TopstepX)
+    try { const j = await this.raw('/api/Auth/validate', {}, true); if (j && j.success && j.newToken) { this.token = j.newToken; this.tokenAt = Date.now(); } return !!(j && j.success); } catch (e) { return false; }
+  }
   async accounts() { return (await this.call('/api/Account/search', { onlyActiveAccounts: true })).accounts || []; }
   async contracts(text, live) { return (await this.call('/api/Contract/search', { searchText: text, live: !!live })).contracts || []; }
   async bars(contractId, fromMs, toMs, tf, live, limit, partial) {

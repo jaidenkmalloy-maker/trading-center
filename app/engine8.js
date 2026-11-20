@@ -62,7 +62,7 @@ LiveRunner.prototype.startStream = function () {
   this.cb = new CandleBuilder(o.tf, addMain); this.mcb = new Map();
   this.stream = new MarketStream({
     url: o.rtUrl, WebSocket: o.WebSocket, token: () => self.api.token,
-    refresh: async () => { if (self.cred) await self.api.login(self.cred.user, self.cred.key); },
+    refresh: async () => { if (Date.now() - (self.api.tokenAt || 0) > 20 * 3600e3) await self.api.validate(); },   // reuse the session: no new sign-in, so TopstepX in your browser is not logged out
     log: m => { if (self.broker) self.broker.say('data', 'Live data: ' + m, /connected\./.test(m)); },
     onLive: () => { const now = o.now(); self.cb.start(now); for (const b of self.mcb.values()) b.start(now); },
     onTrade: (cid, p, v, t) => { if (cid === self.contract.id) { self.cb.add(p, v, t); self.livePrice = p; self.livePriceAt = o.now(); } },

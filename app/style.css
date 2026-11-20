@@ -128,3 +128,13 @@ body:not(.offline) #connForm+#connStep2+details,body:not(.offline) #liveWrap>.pa
 body.offline #kpis,body.offline #systems,body.offline #chartSec,body.offline #labPanel,body.offline #mktPanel,body.offline #chatSec,body.offline #actSec,body.offline .grid3,body.offline #where,body.offline .prog,body.offline #banners{display:none!important}
 .subh{font-size:13px;font-weight:600;margin:18px 0 8px}.subh small{font-weight:400;color:var(--muted);margin-left:6px}
 .pbar{width:70px;height:5px;border-radius:3px;background:#ffffff10;overflow:hidden;margin-bottom:3px}.pbar i{display:block;height:100%;border-radius:3px;box-shadow:0 0 8px currentColor}
+
+/* ===== Simple view: only what matters for trading GEX ===== */
+.chips{display:none;gap:8px;flex-wrap:wrap;margin:0 0 14px}.chip{display:flex;align-items:center;gap:7px;background:#ffffff05;border:1px solid #ffffff0c;border-radius:999px;padding:5px 12px;font-size:12.5px;cursor:pointer}.chip i{width:8px;height:8px;border-radius:50%;background:var(--muted)}.chip.ok i{background:var(--green);box-shadow:0 0 8px var(--green)}.chip.warn i{background:var(--amber)}.chip.halt i{background:var(--red)}
+body.simple .chips{display:flex}#sysChips{order:-1}
+body.simple #systems,body.simple #mktPanel,body.simple #labPanel,body.simple #chatSec,body.simple #perfRow,body.simple #setBox,body.simple #levelsPanel,body.simple #exportPanel,body.simple #alertsPanel,body.simple #actSec>.panel:nth-child(1),body.simple #actSec>.panel:nth-child(2),body.simple #chartSec>div:nth-child(2),body.simple #where,body.simple main>.prog{display:none!important}
+body.simple #actSec,body.simple #chartSec{grid-template-columns:1fr}
+body.simple .side a[data-sec="systems"],body.simple .side a[data-sec="mktPanel"],body.simple .side a[data-sec="labPanel"],body.simple .side a[data-sec="chatSec"],body.simple .side a[data-sec="setBox"]{display:none}
+body.simple #liveWrap{display:flex!important;flex-direction:column}body.simple #liveWrap>*{order:2}body.simple #connPanel{order:3}
+body.offline.simple #liveWrap{display:block!important}
+body.simple #lvCtlWrap{display:flex;flex-direction:column}body.simple #gexPanel{order:-1}body.simple #ctlPanel{order:0}body.simple #logPanel{order:1}

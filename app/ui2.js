@@ -84,7 +84,7 @@ function render() {
   if (sim.paused) b += `<div class="banner amber">Paused by the Performance Manager: ${esc(sim.paused)}. <button class="small" onclick="resumePause()">Resume anyway</button></div>`;
   if (sim.i >= sim.bars.length && !isLive()) b += '<div class="banner info">End of data reached.</div>';
   $('banners').innerHTML = b;
-  renderSystems(h.sys.slice().sort((a, c) => a.name.localeCompare(c.name))); setKpis(h);
+  renderSystems(h.sys.slice().sort((a, c) => a.name.localeCompare(c.name))); setKpis(h); if (typeof chipsRender === 'function') chipsRender(h);
   $('chart').innerHTML = chartSvg();
   { const cp = curPos(); $('chartNote').textContent = cp ? `${cp.side} ${cp.qty} @ ${p4(cp.entry)}, open P&L ${usd(isLive() ? (sim.realOpen || 0) : sim.ex.openPnl(bar.c))}` : 'flat'; }
   $('ticket').innerHTML = ticketHtml(); $('gauges').innerHTML = gaugesHtml(h);

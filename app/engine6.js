@@ -97,7 +97,6 @@ class LiveRunner {
   async healFeed(age) {   // candles stopped arriving: find out why, and fix it if Topstep's other data feed is current
     const o = this.o, tfms = o.tf * 60000, now = o.now(), last = this.sim.bars[this.sim.bars.length - 1], fmt = t => new Date(t).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: '2-digit', minute: '2-digit' }) + ' CT';
     const newest = async live => { try { const b = await this.api.bars(this.contract.id, now - 6 * 3600e3, now, o.tf, live); return b.length ? b[b.length - 1].t : null; } catch (e) { return 'error: ' + e.message; } };
-    try { if (this.cred) await this.api.login(this.cred.user, this.cred.key); } catch (e) { }   // a fresh sign-in first, in case the session went bad
     const cur = await newest(o.live), other = await newest(!o.live), nm = l => l ? 'live' : 'practice';
     const desc = x => x == null ? 'nothing' : typeof x === 'string' ? x : 'a candle from ' + fmt(x);
     let msg = `No new candle for ${Math.round(age / 60)} min (last one ${fmt(last.t)}). Asked Topstep again: the ${nm(o.live)} data feed returned ${desc(cur)}; the ${nm(!o.live)} feed returned ${desc(other)}.`;
