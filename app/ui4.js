@@ -116,7 +116,14 @@ function gxApply(day, s) {
 async function gxSync(force) {
   if (!IS_APP || GX.busy) return; GX.busy = true;
   try {
-    const now = await (await fetch('/app/gex' + (force ? '?force=1' : ''), { cache: 'no-store' })).json(); GX.last = now.levels; GX.err = now.error; GX.today = now.today;
+    let now = await (await fetch('/app/gex' + (force ? '?force=1' : ''), { cache: 'no-store' })).json();
+    if (!now.fresh && now.cboeUrl) {   // the app program was turned away: fetch from this window (a real browser) and hand the data over
+      try { const r = await fetch(now.cboeUrl, { cache: 'no-store' }); if (!r.ok) throw new Error('Cboe answered ' + r.status + ' (browser)');
+        const ing = await (await fetch('/app/gex/ingest', { method: 'POST', headers: { 'content-type': 'application/json' }, body: await r.text() })).json(); if (!ing.ok) throw new Error(ing.error);
+        now = await (await fetch('/app/gex', { cache: 'no-store' })).json();
+      } catch (e) { now.error = (now.error || 'Could not get GEX data') + '; the browser route failed too (' + e.message + ')'; }
+    }
+    GX.last = now.levels; GX.err = now.fresh ? null : now.error; GX.today = now.today;
     const hist = (await (await fetch('/app/gex/history', { cache: 'no-store' })).json()).days || {}; let changed = false;
     for (const [day, s] of Object.entries(hist)) if (gxApply(day, s)) changed = true;
     if (changed) { lvSaveStore(); if (sim && sim.c) sim.c.levelsByDay = LV.byDay; }

@@ -62,20 +62,40 @@ async function applyUpdate() {
 
 
 // ---- free GEX levels ----
-const gx = { last: null, at: 0, err: null, busy: null };
+const gx = { last: null, at: 0, err: null, busy: null, via: null };
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+const CB_HEADERS = { 'user-agent': UA, accept: 'application/json, text/plain, */*', 'accept-language': 'en-US,en;q=0.9', referer: 'https://www.cboe.com/', origin: 'https://www.cboe.com' };
+function curlJson(url) {   // second route: the operating system's own curl (a different network fingerprint than Node)
+  return new Promise((ok, bad) => {
+    const { execFile } = require('child_process'), args = ['-sS', '-L', '--compressed', '-m', '45', '-w', '\n%{http_code}'];
+    for (const [k, v] of Object.entries(CB_HEADERS)) args.push('-H', k + ': ' + v);
+    args.push(url);
+    execFile(process.platform === 'win32' ? 'curl.exe' : 'curl', args, { maxBuffer: 200 * 1024 * 1024, windowsHide: true }, (e, out) => {
+      if (e) return bad(new Error('curl: ' + e.message.split('\n')[0]));
+      const k = out.lastIndexOf('\n'), code = +out.slice(k + 1), body = out.slice(0, k);
+      if (code !== 200) return bad(new Error('Cboe answered ' + code + ' (curl)'));
+      try { ok(JSON.parse(body)); } catch (x) { bad(new Error('curl got something that is not data')); }
+    });
+  });
+}
+function processGex(json, via) {
+  const lv = GEX.computeGex(json, Date.now()), now = Date.now(), ct = GEX.ctNow(now);
+  lv.fetchedAt = now; lv.day = ct.day; lv.via = via; gx.last = lv; gx.at = now; gx.err = null; gx.via = via;
+  fs.mkdirSync(GDIR, { recursive: true }); fs.writeFileSync(path.join(GDIR, 'latest.json'), JSON.stringify(lv));
+  const f = path.join(GDIR, ct.day + '.json'), weekday = !['Sat', 'Sun'].includes(ct.dow) || ct.mins >= 1020;
+  if ((weekday && ct.mins >= 480 && ct.mins < 900 || process.env.TCC_GEX_ANYTIME) && !fs.existsSync(f)) { fs.writeFileSync(f, JSON.stringify(lv)); log("Saved today's GEX levels (" + ct.day + ').'); }
+  return lv;
+}
 async function getGex(force) {
   if (!force && gx.last && Date.now() - gx.at < 10 * 60000) return gx;
   if (gx.busy) return gx.busy;
   gx.busy = (async () => {
+    const errs = [];
     try {
-      const r = await fetch(CFG.cboeUrl, { headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36', accept: 'application/json' }, signal: AbortSignal.timeout(30000) });
-      if (!r.ok) throw new Error('Cboe answered ' + r.status);
-      const lv = GEX.computeGex(await r.json(), Date.now()), now = Date.now(), ct = GEX.ctNow(now);
-      lv.fetchedAt = now; lv.day = ct.day; gx.last = lv; gx.at = now; gx.err = null;
-      fs.mkdirSync(GDIR, { recursive: true }); fs.writeFileSync(path.join(GDIR, 'latest.json'), JSON.stringify(lv));
-      const f = path.join(GDIR, ct.day + '.json'), weekday = !['Sat', 'Sun'].includes(ct.dow) || ct.mins >= 1020;
-      if (weekday && ct.mins >= 480 && ct.mins < 900 && !fs.existsSync(f)) { fs.writeFileSync(f, JSON.stringify(lv)); log('Saved today\'s GEX levels (' + ct.day + ').'); }   // the day's levels: first reading after 8:00 CT
-    } catch (e) { gx.err = 'Could not get GEX data: ' + e.message; log(gx.err); }
+      let json = null;
+      try { const r = await fetch(CFG.cboeUrl, { headers: CB_HEADERS, signal: AbortSignal.timeout(30000) }); if (!r.ok) throw new Error('Cboe answered ' + r.status); json = await r.json(); processGex(json, 'app'); }
+      catch (e1) { errs.push(e1.message); try { json = await curlJson(CFG.cboeUrl); processGex(json, 'curl'); } catch (e2) { errs.push(e2.message); throw new Error(errs.join('; ')); } }
+    } catch (e) { gx.err = 'Could not get GEX data: ' + e.message; if (!gx.loggedErr || Date.now() - gx.loggedErr > 3600e3) { log(gx.err); gx.loggedErr = Date.now(); } }
     finally { gx.busy = null; }
     return gx;
   })();
@@ -85,7 +105,7 @@ function gexHistory() { const out = {}; try { for (const f of fs.readdirSync(GDI
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const send = (res, code, body, type) => { res.writeHead(code, { 'content-type': type || 'application/json', 'cache-control': 'no-store' }); res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
-const readBody = req => new Promise((ok, bad) => { const c = []; let n = 0; req.on('data', d => { n += d.length; if (n > 2e6) { bad(new Error('too big')); req.destroy(); } else c.push(d); }); req.on('end', () => ok(Buffer.concat(c))); req.on('error', bad); });
+const readBody = (req, max) => new Promise((ok, bad) => { const c = []; let n = 0; req.on('data', d => { n += d.length; if (n > (max || 2e6)) { bad(new Error('too big')); req.destroy(); } else c.push(d); }); req.on('end', () => ok(Buffer.concat(c))); req.on('error', bad); });
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -101,7 +121,11 @@ const server = http.createServer(async (req, res) => {
       catch (e) { return send(res, 502, { success: false, errorMessage: 'This computer could not reach Topstep: ' + e.message }); }
       const out = Buffer.from(await r.arrayBuffer()); return send(res, r.status, out, r.headers.get('content-type') || 'application/json');
     }
-    if (u.pathname === '/app/gex') { const g = await getGex(u.searchParams.get('force') === '1'); const ct = GEX.ctNow(Date.now()); return send(res, 200, { ok: !!g.last, levels: g.last, error: g.err, today: ct.day, todaySaved: fs.existsSync(path.join(GDIR, ct.day + '.json')) ? readJson(path.join(GDIR, ct.day + '.json'), null) : null }); }
+    if (u.pathname === '/app/gex') { const g = await getGex(u.searchParams.get('force') === '1'); const ct = GEX.ctNow(Date.now()); return send(res, 200, { ok: !!g.last, levels: g.last, error: g.err, cboeUrl: CFG.cboeUrl, fresh: !!g.last && !g.err && Date.now() - g.at < 20 * 60000, today: ct.day, todaySaved: fs.existsSync(path.join(GDIR, ct.day + '.json')) ? readJson(path.join(GDIR, ct.day + '.json'), null) : null }); }
+    if (u.pathname === '/app/gex/ingest' && req.method === 'POST') {   // third route: the dashboard window (a real browser) fetched the data and hands it over
+      if (req.headers.origin && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(req.headers.origin)) return send(res, 403, { error: 'wrong origin' });
+      try { const lv = processGex(JSON.parse((await readBody(req, 300e6)).toString('utf8')), 'browser'); return send(res, 200, { ok: true, levels: lv }); } catch (e) { return send(res, 200, { ok: false, error: e.message }); }
+    }
     if (u.pathname === '/app/gex/history') return send(res, 200, { days: gexHistory() });
     if (u.pathname === '/app/status') return send(res, 200, { version: current.version, update: { state: upd.state, msg: upd.msg, version: upd.available && upd.available.version, notes: upd.available && upd.available.notes } });
     if (u.pathname === '/app/check' && req.method === 'POST') { await checkUpdate(); return send(res, 200, { state: upd.state, msg: upd.msg }); }
