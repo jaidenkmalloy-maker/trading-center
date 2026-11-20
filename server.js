@@ -84,7 +84,8 @@ function processGex(json, via) {
   lv.fetchedAt = now; lv.day = ct.day; lv.via = via; gx.last = lv; gx.at = now; gx.err = null; gx.via = via;
   fs.mkdirSync(GDIR, { recursive: true }); fs.writeFileSync(path.join(GDIR, 'latest.json'), JSON.stringify(lv));
   const f = path.join(GDIR, ct.day + '.json'), weekday = !['Sat', 'Sun'].includes(ct.dow) || ct.mins >= 1020;
-  if ((weekday && ct.mins >= 480 && ct.mins < 900 || process.env.TCC_GEX_ANYTIME) && !fs.existsSync(f)) { fs.writeFileSync(f, JSON.stringify(lv)); log("Saved today's GEX levels (" + ct.day + ').'); }
+  const stale = fs.existsSync(f) && (readJson(f, {}).method || 1) < 2;   // a reading made with the older wall method is replaced
+  if ((weekday && ct.mins >= 480 && ct.mins < 900 || process.env.TCC_GEX_ANYTIME) && (!fs.existsSync(f) || stale)) { fs.writeFileSync(f, JSON.stringify(lv)); log("Saved today's GEX levels (" + ct.day + ').'); }
   return lv;
 }
 async function getGex(force) {

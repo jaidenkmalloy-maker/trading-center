@@ -33,7 +33,12 @@ function computeGex(json, now, opt) {
   for (const r of rows) { const v = dollar(r.g || bsGamma(spot, r.k, r.T, r.iv), r.oi, spot) * sgn(r); const e = by[r.k] || (by[r.k] = { k: r.k, call: 0, put: 0 }); if (r.type === 'C') e.call += v; else e.put += v; }
   const near = Object.values(by).filter(s => Math.abs(s.k - spot) / spot < 0.1);
   let callWall = null, putWall = null;
-  for (const s of near) { if (s.call > 0 && (!callWall || s.call > callWall.call)) callWall = s; if (s.put < 0 && (!putWall || s.put < putWall.put)) putWall = s; }
+  let bigCall = null, bigPut = null;
+  for (const s of near) {
+    if (s.call > 0 && s.k >= spot && (!callWall || s.call > callWall.call)) callWall = s;   // ceiling: the biggest call strike at or above the price
+    if (s.put < 0 && s.k <= spot && (!putWall || s.put < putWall.put)) putWall = s;         // floor: the biggest put strike at or below the price
+    if (s.call > 0 && (!bigCall || s.call > bigCall.call)) bigCall = s; if (s.put < 0 && (!bigPut || s.put < bigPut.put)) bigPut = s;
+  }
   const tot = S => rows.reduce((a, r) => a + dollar(bsGamma(S, r.k, r.T, r.iv), r.oi, S) * sgn(r), 0);
   const grid = []; for (let i = -24; i <= 24; i++) grid.push(spot * (1 + i * 0.0025)); const vals = grid.map(tot);
   let flip = null;
@@ -43,7 +48,7 @@ function computeGex(json, now, opt) {
   const iv = atm.length ? atm.reduce((a, r) => a + r.iv, 0) / atm.length : null, move = iv ? spot * iv * Math.sqrt(1 / 252) : null;
   const total = tot(spot);
   return { spot, quoteTime: json.timestamp || d.timestamp || null, totalGex: total, regime: total >= 0 ? 'positive' : 'negative',
-    callWall: callWall && callWall.k, putWall: putWall && putWall.k, flip: flip == null ? null : q(flip),
+    callWall: callWall && callWall.k, putWall: putWall && putWall.k, biggestCallStrike: bigCall && bigCall.k, biggestPutStrike: bigPut && bigPut.k, method: 2, flip: flip == null ? null : q(flip),
     ivAtm: iv, ivHi: move ? q(spot + move) : null, ivLo: move ? q(spot - move) : null, nOptions: rows.length };
 }
 const _f = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', weekday: 'short' });
