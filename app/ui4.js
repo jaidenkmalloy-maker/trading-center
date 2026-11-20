@@ -18,6 +18,11 @@ function kpWatch() {   // once per tick: connection trouble and the end-of-day r
   const r = runner; if (!r || !sim || runner.sim !== sim) return;
   try { const L = r.learner; if (L && L.lastRunAt !== KP.labShown) { KP.labShown = L.lastRunAt; labRender(); } } catch (e) { }
   try { mktRender(); } catch (e) { }
+  try {   // live market data status, and a text only if it stays down for 2 minutes
+    const S = r.stream ? r.stream.status() : null, el = document.getElementById('rtStatus');
+    if (S && el) { const age = S.tickAgeSec; el.innerHTML = S.state === 'live' ? `<span class="pos">&#9679;</span> Live market data: connected${age != null ? ' · last price ' + (age < 60 ? age + ' s' : Math.round(age / 60) + ' min') + ' ago' : ' · waiting for the first price'}${r.livePrice != null ? ' · ' + r.livePrice : ''}` : S.state === 'unavailable' ? 'Live market data is not available here; using Topstep\'s candle history only.' : `<span class="neg">&#9679;</span> Live market data: ${S.state === 'connecting' ? 'connecting…' : 'reconnecting…'}${S.lastError ? ' (' + esc(S.lastError.m) + ')' : ''}`; }
+    if (S) { if (S.state === 'live') KP.rtDown = null; else if (S.state !== 'unavailable') { if (!KP.rtDown) KP.rtDown = Date.now(); else if (Date.now() - KP.rtDown > 120000) kpSend('Problem', 'Live market data has been down for over 2 minutes: ' + (S.lastError ? S.lastError.m : 'reconnecting') + '. The app falls back to Topstep\'s candle history meanwhile.', 4); } }
+  } catch (e) { }
   if (r.lastError) { if (!KP.errSince) KP.errSince = Date.now(); if (Date.now() - KP.errSince > 60000) kpSend('Problem', 'Connection trouble for over a minute: ' + r.lastError, 4); } else KP.errSince = null;
   const now = new Date(), ct = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' })), day = ct.toDateString(), mins = ct.getHours() * 60 + ct.getMinutes(), R = sim.rules;
   if (KP.day !== day) { KP.day = day; KP.dayStart = R.closed || 0; }

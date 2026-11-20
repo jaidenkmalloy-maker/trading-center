@@ -1,8 +1,8 @@
 {
-  "version": "1.6.1",
-  "notes": "When candles stop, the app checks Topstep's other data feed, explains, and recovers",
+  "version": "1.7.0",
+  "notes": "Live market data straight from Topstep's real-time hub",
   "files": {
-    "app/index.html": "b921dcf99c831074d526e5fa5192a343262626f950c1d094a86f6dcb7476d48b",
+    "app/index.html": "4f646387157b569cbb44f1e0ee1afd2a605d650c4bd3a44c18f6324ff26640e7",
     "app/style.css": "0aacb726f96a57e9357547589591cef24dd7a4f72b953ea9f4802e327a489579",
     "app/restore.js": "4073d4f455edcb3863eb796136ec867adc56c1c87cfc99817fa787b3783191bf",
     "app/engine1.js": "0d69881d91c4b1b1672e65d6e374786c8e853f78c425335e52f1e14072689611",
@@ -10,12 +10,13 @@
     "app/engine3.js": "15b839f55ff9a0c7933ee16977690513fe0925d9df4daca7f89f5a9fb6e6233e",
     "app/engine4.js": "8407e4c56d4bb0df0a01d0f33aecd42b7c05608ff367af2ad1679a1d761b742b",
     "app/engine5.js": "eccae3d3a1fecf4f0a29b7700e045ac9540b5a013209f37da15ca09bb1a45975",
-    "app/engine6.js": "1a4e13c02d8aa720d2587f8c34adf6e0330d60983d24ba042cd292495746b6a3",
+    "app/engine6.js": "4330ec9d74813a951cdf1f16033953fd5fffb1ab2e8a20809311b880f90dd4a0",
     "app/engine7.js": "a4ef9adb6664cb507cba41323a9ba67cc11df61926ef22ed2737c414a2fc732c",
+    "app/engine8.js": "61d5ce94fa286cc73423bc811af7dd809a645dd0e6c34e318cdccd768dbb791f",
     "app/ui1.js": "750aa8fc5991050aab8ff9b98397c9d655be539cc8ddd15157a2309d20e0251c",
     "app/ui2.js": "98eee27c832f1410a2d0ebe8bc9372a214431024878f35f7a676f461e04b9761",
     "app/ui3.js": "91cc729a12e664e594dbc96a47bde219b2d740391dd8de6fb9a968d8eb87fded",
-    "app/ui4.js": "f628e3e784df545ea08262a871090760d7d9034fced9d5fc9df5eddc906ade93",
+    "app/ui4.js": "99a253759ab00efb8f02137e06c3041906e62baae5aea92afe1453b5c21b2027",
     "server.js": "7fc9b193659c4597790af2e717418048a0081975a32d9ba176c73f85c06bc1ee",
     "gex.js": "0c48b1b21c073f479aa5279b60ecb13471831e82f9f598c29c513c39848db8c4"
   }

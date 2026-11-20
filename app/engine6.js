@@ -67,7 +67,7 @@ class LiveRunner {
     if (!Array.isArray(cfg.strategies)) cfg.strategies = [];     // live: trade only what the Backtester approves
     this.sim = new LiveSim(bars, cfg); this.broker = new Broker(this.api, this.sim, { mode: 'watch', accountId, contract, tf: o.tf, now: o.now });
     this.sim.initAccount(this.account.balance); this.learner = new Lab(this.sim); this.sim.lab = this.learner; { const st = this.o.store, k = 'probation_' + symbol, old = 'probation_' + contract.id; try { if (!st.get(k) && st.get(old)) st.set(k, st.get(old)); } catch (e) { } }   // keyed by market, so it survives the quarterly contract roll
-    this.probation = new Probation(this.sim, this.o.store, 'probation_' + symbol); this.sym = symbol; this.markets = new MarketWatch(this, this.o.scanList); this.loadHist(); this.lastSave = this.o.now(); this.broker.onTradeClosed = () => this.saveHist(); if (this.probation.promoted.length) this.sim.setStrategies(this.probation.promoted.slice()); this.sim.onStrategies = l => this.onLearned && this.onLearned({ strategies: l }); this.status = 'running'; this.lastBars = this.lastMgr = this.lastBal = now;
+    this.probation = new Probation(this.sim, this.o.store, 'probation_' + symbol); this.sym = symbol; this.markets = new MarketWatch(this, this.o.scanList); this.loadHist(); this.lastSave = this.o.now(); this.broker.onTradeClosed = () => this.saveHist(); if (this.startStream) this.startStream(); if (this.probation.promoted.length) this.sim.setStrategies(this.probation.promoted.slice()); this.sim.onStrategies = l => this.onLearned && this.onLearned({ strategies: l }); this.status = 'running'; this.lastBars = this.lastMgr = this.lastBal = now;
     this.sim.note(this.sim.i - 1, 'scanner', 'info', `Live data loaded: ${bars.length} candles (${stored ? 'stored history plus new' : 'fresh download'}). Contract ${contract.name}, tick ${contract.tickSize}, $${(contract.tickValue / contract.tickSize).toFixed(2)} per point.`, true);
     return this.sim;
   }
@@ -102,10 +102,12 @@ class LiveRunner {
     if (this.busy || !this.sim) return; this.busy = true; const o = this.o;
     try {
       const now = o.now(), last = this.sim.bars[this.sim.bars.length - 1];
+      if (this.streamTick) this.streamTick(now);
       if (now - this.lastBars >= o.barsEvery) { this.lastBars = now; await this.guard(() => this.pollBars()); }
       const age = this.dataAgeSec(); if (age != null && age > 33 * 60 && !closedHours(now) && now - (this.lastHeal || 0) >= 5 * 60000) { this.lastHeal = now; await this.healFeed(age); }
       if (now - this.lastBal >= o.balEvery) { this.lastBal = now; await this.guard(() => this.pollBalance()); }
-      if ((this.broker.state || this.broker.unmanaged) && now - (this.lastPx || 0) >= 10000) { this.lastPx = now; try { const nb = await this.api.bars(this.contract.id, now - 15 * 60000, now, 1, o.live, 3, true); if (nb.length) { this.livePrice = nb[nb.length - 1].c; this.livePriceAt = now; } } catch (e) { } }
+      const liveFresh = this.livePriceAt && now - this.livePriceAt < 15000;
+      if (!liveFresh && (this.broker.state || this.broker.unmanaged) && now - (this.lastPx || 0) >= 10000) { this.lastPx = now; try { const nb = await this.api.bars(this.contract.id, now - 15 * 60000, now, 1, o.live, 3, true); if (nb.length) { this.livePrice = nb[nb.length - 1].c; this.livePriceAt = now; } } catch (e) { } }
       if (now - this.lastMgr >= o.mgrEvery) { this.lastMgr = now; await this.broker.manage(this.livePrice != null && now - this.livePriceAt < 60000 ? this.livePrice : last.c); }
       if (now - (this.lastSave || 0) >= 60000) this.saveHist();
       if (this.markets && this.o.scanMarkets !== false) { try { this.markets.tick(now); } catch (e) { } }
@@ -224,16 +226,18 @@ class MarketWatch {
     m.sim = new Sim(bars, this.cfgFor(f.c, m.sym));
     try { const sv = JSON.parse(this.store().get('mktlab_' + m.sym) || 'null'); if (sv && sv.approved && sv.approved.length) m.sim.setStrategies(sv.approved); m.saved = sv; } catch (e) { }
     while (m.sim.step()); m.seen = m.sim.sigs.length; m.trend = mtfView(m.sim.bars, m.sim.bars.length);
-    m.lab = new Lab(m.sim); m.status = 'ready'; m.note = ''; m.lastPoll = now;
+    m.lab = new Lab(m.sim); m.status = 'ready'; m.note = ''; m.lastPoll = now; if (this.r.watchMarket) this.r.watchMarket(m);
   }
   async poll(m) {
     const o = this.r.o, now = o.now(), tfms = o.tf * 60000, last = m.sim.bars[m.sim.bars.length - 1];
     const nb = await this.r.api.bars(m.contract.id, last.t - 3 * tfms, now, o.tf, m.live), fresh = annotate(nb.filter(b => b.t > last.t && b.t + tfms <= now).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c })));
-    for (const b of fresh) { m.sim.bars.push(b); m.newBars++; } while (m.sim.step());
-    if (fresh.length) m.trend = mtfView(m.sim.bars, m.sim.bars.length);
+    for (const b of fresh) { m.sim.bars.push(b); m.newBars++; }
+    this.after(m); m.lastPoll = now;
+  }
+  after(m) {   // new candles arrived (from polling or the live feed): scan them, refresh trends, raise alerts
+    while (m.sim.step()); m.trend = mtfView(m.sim.bars, m.sim.bars.length);
     const recs = m.sim.sigs.slice(m.seen); m.seen = m.sim.sigs.length;
     for (const rec of recs) if (rec.decision === 'approved') { const s = rec.sig, a = { t: s.t, dir: s.dir, name: s.name || 'setup', stop: s.stop, target: s.target, entry: s.planned }; m.alerts.unshift(a); if (m.alerts.length > 20) m.alerts.pop(); if (this.onSignal) this.onSignal(m, a); }
-    m.lastPoll = now;
   }
   async runLab(m) {
     this.labBusy = true; m.status = 'testing';
